@@ -90,3 +90,40 @@ export const MetricsQuerySchema = v.object({
 })
 
 export type MetricsQuery = v.InferOutput<typeof MetricsQuerySchema>
+
+/**
+ * Body untuk membuat / update alert.
+ *
+ * - `metric`: kolom yang dievaluasi (cpu | mem | disk | temp | status)
+ * - `operator`: gt | lt | eq
+ * - `threshold`: nilai ambang batas; untuk `status`, 1 = up, 0 = down
+ * - `duration_s`: kondisi harus terpenuhi selama N detik baru fire
+ * - `webhook_url`: URL POST notifikasi (optional)
+ */
+const alertMetric = v.picklist(["cpu", "mem", "disk", "temp", "status"])
+const alertOperator = v.picklist(["gt", "lt", "eq"])
+
+export const CreateAlertBodySchema = v.object({
+	system_id: v.pipe(v.string(), v.minLength(1)),
+	metric: alertMetric,
+	operator: alertOperator,
+	threshold: v.number(),
+	duration_s: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(86_400))),
+	enabled: v.optional(v.boolean()),
+	webhook_url: v.optional(v.pipe(v.string(), v.url(), v.maxLength(2048))),
+})
+
+export type CreateAlertBody = v.InferOutput<typeof CreateAlertBodySchema>
+
+export const UpdateAlertBodySchema = v.partial(
+	v.object({
+		metric: alertMetric,
+		operator: alertOperator,
+		threshold: v.number(),
+		duration_s: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(86_400)),
+		enabled: v.boolean(),
+		webhook_url: v.union([v.pipe(v.string(), v.url(), v.maxLength(2048)), v.null()]),
+	})
+)
+
+export type UpdateAlertBody = v.InferOutput<typeof UpdateAlertBodySchema>

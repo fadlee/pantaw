@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import alerts from "./routes/alerts"
 import auth from "./routes/auth"
 import ingest from "./routes/ingest"
 import systems from "./routes/systems"
@@ -53,6 +54,7 @@ app.get("/api/v1/health", (c) => c.redirect("/api/health", 301))
 app.route("/api/v1/ingest", ingest)
 app.route("/api/v1/auth", auth)
 app.route("/api/v1/systems", systems)
+app.route("/api/v1/alerts", alerts)
 
 export type AppType = typeof app
 
