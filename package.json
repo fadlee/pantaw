@@ -1,0 +1,36 @@
+{
+	"name": "pantaw",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"deploy": "wrangler deploy",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome lint .",
+		"format": "biome format --write .",
+		"check": "biome check .",
+		"db:migrate:local": "wrangler d1 migrations apply pantaw --local",
+		"db:migrate:remote": "wrangler d1 migrations apply pantaw --remote",
+		"db:export": "wrangler d1 export pantaw --output backup.sql"
+	},
+	"dependencies": {
+		"@hono/valibot-validator": "^0.5.2",
+		"hono": "^4.6.13",
+		"valibot": "^1.0.0-beta.9"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@cloudflare/vite-plugin": "^0.1.16",
+		"@cloudflare/vitest-pool-workers": "^0.8.0",
+		"@cloudflare/workers-types": "^4.20241224.0",
+		"typescript": "^5.7.2",
+		"vite": "^6.0.5",
+		"vitest": "^2.1.8",
+		"wrangler": "^3.99.0"
+	}
+}

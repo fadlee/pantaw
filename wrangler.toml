@@ -1,0 +1,52 @@
+name = "pantaw"
+main = "./src/server/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers Static Assets (SPA bundle).
+# Akan diaktifkan di Fase 3 saat client React di-build.
+# [assets]
+# directory = "./dist/client"
+# binding = "ASSETS"
+# not_found_handling = "single-page-application"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "pantaw"
+database_id = "REPLACE_AFTER_CREATE"   # `wrangler d1 create pantaw` akan output ID
+migrations_dir = "./migrations"
+
+# KV Namespaces
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "REPLACE_AFTER_CREATE"
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "REPLACE_AFTER_CREATE"
+
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "REPLACE_AFTER_CREATE"
+
+# Workers Rate Limiting binding (per-token, untuk /api/v1/ingest)
+[[unsafe.bindings]]
+name = "INGEST_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 3, period = 60 }
+
+# Cron triggers (alert + status checker, metrics cleanup)
+[triggers]
+crons = ["*/2 * * * *", "0 2 * * *"]
+
+# Observability
+[observability]
+enabled = true
+
+# Local dev: gunakan .dev.vars untuk secrets seperti JWT_SECRET_V1
+# Variabel non-secret bisa di sini:
+[vars]
+RETENTION_DAYS = "30"
+TIMEOUT_SECONDS = "90"

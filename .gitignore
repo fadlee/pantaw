@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+.wrangler/
+
+# Cloudflare
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Database backups
+backup.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE / Editor
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Test
+coverage/
+
+# Env
+.env
+.env.local
+.env.*.local

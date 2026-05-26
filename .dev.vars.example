@@ -1,0 +1,7 @@
+# Local development secrets. Jangan commit file ini.
+# Salin ke .dev.vars dan isi nilainya.
+
+# JWT signing key. Versioned untuk rotation (lihat RFC 8.3).
+# Generate via: openssl rand -base64 64
+JWT_SECRET_V1="REPLACE_ME_WITH_LONG_RANDOM_VALUE"
+JWT_KID_CURRENT="v1"
