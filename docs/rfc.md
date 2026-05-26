@@ -54,12 +54,11 @@ Agent (di setiap server)
 Agent (di setiap server)
   └─── HTTPS POST /ingest ──→ Cloudflare Workers (API)
                                     ├─── D1 / Turso (penyimpanan metrik)
-                                    ├─── KV (session & token cache)
-                                    ├─── Durable Objects (state per agent)
+                                    ├─── KV (session, rate-limit, latest-metrics cache)
                                     └─── Cloudflare Pages (dashboard SPA)
                                               └─── Browser (dashboard)
 
-Workers Cron Trigger (alert checker, tiap 1–5 menit)
+Workers Cron Trigger (alert + status checker, tiap 2 menit)
 ```
 
 **Perubahan kunci:**
@@ -69,11 +68,13 @@ Workers Cron Trigger (alert checker, tiap 1–5 menit)
 | Transport agent→hub | SSH reverse tunnel | HTTPS POST |
 | Runtime hub | Go binary (PocketBase) | Cloudflare Workers (TypeScript) |
 | Database | SQLite (file di disk) | D1 (SQLite-compatible) atau Turso |
-| State management | In-memory PocketBase | Durable Objects |
+| State management | In-memory PocketBase | Stateless Workers + D1 (status dihitung dari `MAX(metrics.ts)`) |
 | Auth | PocketBase built-in | JWT + API Key, diverifikasi di Workers |
 | Dashboard UI | PocketBase auto-UI | SPA (React/Vue) di Cloudflare Pages |
 | Alert scheduler | PocketBase hooks | Workers Cron Trigger |
 | Hosting | VPS (berbayar) | Cloudflare free tier |
+
+**Catatan desain:** Versi awal RFC ini sempat memasukkan Durable Objects untuk per-agent state, buffer metrik, dan deteksi agent down via DO Alarms. Setelah dihitung ulang, kombinasi ingest + alarm DO untuk 10 agent menghasilkan ~1,3 juta DO invocation/bulan, sudah melampaui DO free tier (1M/bulan), padahal manfaatnya bisa dicapai cukup dengan kolom `last_seen` di D1 atau perhitungan dinamis dari `MAX(metrics.ts)`. Karena MVP juga tidak membutuhkan WebSocket fan-out (lihat section 11 #3), DO didrop dari arsitektur. Dapat ditambahkan kembali di fase berikutnya bila real-time push diperlukan.
 
 ---
 
@@ -101,16 +102,35 @@ Ditulis dalam TypeScript, di-deploy sebagai Cloudflare Worker.
 - **Agent → Hub:** API key stateless, dikirim sebagai header `Authorization: Bearer <key>`. Key di-hash (SHA-256) dan disimpan di D1 table `agent_tokens`.
 - **User → Hub:** Username + password → JWT (RS256, expire 24 jam). JWT di-verify di Workers tanpa DB lookup per-request. Refresh token disimpan di KV dengan TTL 30 hari.
 
-### 4.2 Durable Objects (Agent State Manager)
+### 4.2 Status & Liveness Tracking (Stateless)
 
-Setiap agent memiliki satu Durable Object dengan ID = `system_id`. DO bertugas:
+MVP tidak menggunakan Durable Objects. Status agent (`up` / `down` / `unknown`) tidak disimpan sebagai kolom stored, melainkan dihitung dari timestamp metrik terakhir:
 
-- Menyimpan `last_seen` timestamp
-- Menyimpan buffer metrik 1 menit sebelum di-flush ke D1 (mengurangi write)
-- Menentukan status koneksi: `up` / `down` / `unknown`
-- Mentrigger webhook alert jika agent tidak check-in dalam `timeout_seconds`
+```
+status = up      jika now - MAX(metrics.ts) < timeout_seconds
+status = down    jika now - MAX(metrics.ts) >= timeout_seconds
+status = unknown jika belum pernah ada metrik untuk system tsb
+```
 
-DO di-alarm setiap 60 detik menggunakan [DO Alarms API](https://developers.cloudflare.com/durable-objects/api/alarms/) untuk mendeteksi agent yang mati.
+Default `timeout_seconds` = 90 (3× interval polling 30 detik).
+
+**Alur ingest:**
+
+```
+POST /api/v1/ingest
+  1. Verify Bearer token → resolve system_id
+  2. Validate payload (schema, ts dalam window wajar)
+  3. INSERT OR IGNORE INTO metrics (system_id, ts, ...)  -- idempotent via UNIQUE(system_id, ts)
+  4. Update CACHE_KV: metrics:{system_id}:latest = payload (TTL 90s)
+  5. Update agent_tokens.last_used (best-effort, boleh di-skip jika hot path)
+  6. Return 204
+```
+
+Ingest hanya melakukan **1 D1 write** ke tabel `metrics`. Tabel `systems` tidak di-update per-ingest sehingga write D1 tidak berlipat ganda.
+
+**Deteksi agent down:** dilakukan oleh cron trigger (lihat 4.5) yang menscan systems dan membandingkan `MAX(metrics.ts)` dengan `now - timeout_seconds`. Jika transition `up → down`, kirim webhook dan log ke `alerts.last_fired`.
+
+**Idempotensi:** Tambah constraint `UNIQUE(system_id, ts)` ke tabel `metrics`. Jika agent retry POST yang sudah berhasil tertulis, `INSERT OR IGNORE` mengabaikan duplikat tanpa error.
 
 ### 4.3 Database Schema
 
@@ -123,12 +143,18 @@ CREATE TABLE systems (
   id          TEXT PRIMARY KEY,        -- nanoid atau uuid
   name        TEXT NOT NULL UNIQUE,
   host        TEXT NOT NULL,           -- hostname/IP agent (informational)
-  status      TEXT DEFAULT 'unknown',  -- up | down | unknown
   agent_token_hash TEXT NOT NULL,      -- SHA-256 dari API key
+  timeout_seconds INTEGER DEFAULT 90,  -- ambang batas down detection
+  last_status TEXT DEFAULT 'unknown',  -- snapshot status terakhir hasil cron (up|down|unknown)
+  last_status_at INTEGER,              -- unix ts saat last_status diset cron
   created_at  INTEGER NOT NULL,        -- unix timestamp
   updated_at  INTEGER NOT NULL,
   info        TEXT                     -- JSON: OS, kernel, uptime, dll
 );
+
+-- Catatan: status real-time dihitung dari MAX(metrics.ts).
+-- last_status hanya snapshot dari cron untuk keperluan alert state machine
+-- (mendeteksi transition up<->down) dan dashboard fallback saat KV miss.
 ```
 
 #### Tabel `users`
@@ -164,7 +190,8 @@ CREATE TABLE metrics (
   load5      REAL,
   load15     REAL,
   temp       REAL,                     -- celsius, nullable
-  extra      TEXT                      -- JSON: GPU, container stats, dll
+  extra      TEXT,                     -- JSON: GPU, container stats, dll
+  UNIQUE(system_id, ts)                 -- idempotensi ingest retry
 );
 
 CREATE INDEX idx_metrics_system_ts ON metrics (system_id, ts DESC);
@@ -215,9 +242,10 @@ Cache KV untuk metrik terakhir penting: setiap kali dashboard di-poll, Workers m
 
 | Trigger | Schedule | Fungsi |
 |---|---|---|
-| Alert checker | `*/2 * * * *` | Evaluasi semua alert, kirim webhook jika threshold terpenuhi |
+| Alert + status checker | `*/2 * * * *` | Untuk tiap system: hitung status dari `MAX(metrics.ts)`, deteksi transition up↔down, evaluasi threshold alert (cpu/mem/disk/temp), kirim webhook jika perlu, update `systems.last_status` jika berubah |
 | Metrics cleanup | `0 2 * * *` | Hapus metrik lebih lama dari `RETENTION_DAYS` |
-| Status sync | `* * * * *` | Sync status agent dari DO ke D1 `systems.status` |
+
+Semua kebutuhan periodic dikonsolidasi ke satu cron `*/2 * * * *` agar invocation Workers cron tetap minimal (~720/hari) dan logic state-transition alert tidak race dengan status sync.
 
 ### 4.6 Dashboard SPA (Cloudflare Pages)
 
@@ -300,7 +328,7 @@ Agent mengirim metrik dalam format JSON berikut setiap interval:
 }
 ```
 
-Workers memvalidasi payload ini, mengekstrak `system_id` dari token, lalu menulis ke D1 dan mengupdate DO state.
+Workers memvalidasi payload ini, mengekstrak `system_id` dari token, lalu menulis 1 row ke `metrics` (D1) dan menyegarkan `CACHE_KV: metrics:{system_id}:latest`. Tidak ada state lain yang diupdate per-ingest; status agent dihitung secara dinamis dari `MAX(metrics.ts)` (lihat 4.2).
 
 ---
 
@@ -312,21 +340,31 @@ Asumsi: **10 server**, polling interval **30 detik**, **20 dashboard page load/h
 |---|---|---|---|
 | Workers (agent ingest) | 28.800 | 100.000/hari | 29% |
 | Workers (dashboard API) | 100 | 100.000/hari | <1% |
-| Workers (cron alert) | 720 | 100.000/hari | <1% |
-| **Workers total** | **29.620** | **100.000** | **~30%** |
+| Workers (cron alert+status) | 720 | 100.000/hari | <1% |
+| **Workers total** | **~29.620** | **100.000** | **~30%** |
 
 | Sumber | Rows/hari | Kuota D1 Free | Persentase |
 |---|---|---|---|
-| D1 writes (ingest) | 28.800 | ~100K/hari | ~29% |
-| D1 reads (ingest + auth) | 86.400 | ~5M/hari | ~2% |
-| D1 reads (dashboard) | 1.000 | ~5M/hari | <1% |
-| **D1 total reads** | **~87.400** | **~5M** | **~2%** |
+| D1 writes (ingest, 1 row/payload) | 28.800 | 100K/hari | ~29% |
+| D1 reads (auth lookup agent_tokens) | 28.800 | 5M/hari | <1% |
+| D1 reads (cron alert+status, ~720 × N system) | ~7.200 | 5M/hari | <1% |
+| D1 reads (dashboard) | ~1.000 | 5M/hari | <1% |
+| **D1 total reads** | **~37.000** | **5M** | **<1%** |
 
-**Kesimpulan:** Untuk pemakaian personal hingga ~30 server, semua komponen masih jauh di bawah batas free tier. Batas pertama yang akan tercapai adalah **Workers 100K request/hari** saat memantau lebih dari ~34 server dengan interval 30 detik.
+| Storage | Estimasi | Kuota D1 Free | Catatan |
+|---|---|---|---|
+| Metrics row size | ~150 bytes/row | — | tergantung ukuran kolom `extra` |
+| 10 server, 30d retention | 10 × 28.800/10 × 30 × 150 B ≈ 130 MB | 5 GB total per akun | <3% |
+
+**Kesimpulan:** Untuk pemakaian personal hingga ~30 server, semua komponen masih jauh di bawah batas free tier. Batas pertama yang akan tercapai adalah **Workers 100K request/hari** saat memantau lebih dari ~34 server dengan interval 30 detik. Storage D1 baru jadi concern saat retensi dinaikkan ke ratusan hari atau jumlah agent puluhan kali lipat.
 
 Mitigasi jika mendekati batas Workers:
 - Tingkatkan interval agent ke 60 detik (default Beszel adalah 30 detik)
 - Aktifkan batching: agent mengirim bundle 2 menit sekaligus dalam satu POST
+
+Mitigasi jika mendekati batas D1 writes:
+- Batching ingest (poin di atas) langsung mengurangi writes proporsional
+- Pertimbangkan rollup tabel `metrics_hourly` agar retensi panjang tidak bergantung pada raw rows
 
 ---
 
@@ -369,12 +407,12 @@ Mitigasi jika mendekati batas Workers:
 
 | Keterbatasan | Dampak | Mitigasi |
 |---|---|---|
-| Workers CPU limit 10ms (free) | Logic kompleks bisa timeout | Minimalkan komputasi per-request; cron trigger punya 30s |
-| Tidak ada WebSocket push di free tier | Dashboard tidak real-time | Polling dari dashboard setiap 30 detik |
-| D1 max 500MB per database (free) | Historis metrik terbatas | Retention policy + data aggregation harian |
-| DO hanya SQLite storage di free tier | Tidak bisa pakai KV DO | Sudah didesain pakai SQLite DO dari awal |
-| Cold start DO (~100ms) | Latency spike sesekali | Acceptable untuk use case monitoring |
+| Workers CPU limit 10ms (free) | Logic kompleks bisa timeout | Minimalkan komputasi per-request; cron trigger punya 30s wall time |
+| Tidak ada WebSocket push di MVP | Dashboard tidak real-time | Polling dari dashboard setiap 30 detik |
+| D1 storage 5GB (free, total per akun) | Historis metrik terbatas | Retention policy + data aggregation harian (lihat section 7) |
+| Status agent dihitung tiap query | Sedikit overhead di cron + dashboard | Index `(system_id, ts DESC)` membuat `MAX(ts)` cepat |
 | Tidak ada SSH tunnel | Perlu modifikasi agent | Opsi A backward-compatible |
+| Tidak ada real-time push (DO didrop) | Status delay maksimal 2 menit (cron interval) | Acceptable untuk monitoring; tambah DO + WebSocket di fase berikutnya jika perlu |
 
 ---
 
@@ -383,10 +421,10 @@ Mitigasi jika mendekati batas Workers:
 ### Fase 1 — Foundation (Minggu 1–2)
 
 - [ ] Inisialisasi project Cloudflare Workers dengan Wrangler
-- [ ] Setup D1 database, migrate schema
+- [ ] Setup D1 database, migrate schema (termasuk constraint `UNIQUE(system_id, ts)` di `metrics`)
 - [ ] Implementasi endpoint `/api/v1/ingest` dengan autentikasi API key
-- [ ] Implementasi Durable Object dasar (state per agent, last_seen tracking)
-- [ ] Unit test untuk auth dan ingestion logic
+- [ ] Implementasi `CACHE_KV` write-through pada path ingest
+- [ ] Unit test untuk auth dan ingestion logic (termasuk skenario retry/duplikat)
 
 ### Fase 2 — API Lengkap (Minggu 3–4)
 
