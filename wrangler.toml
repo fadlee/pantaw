@@ -15,21 +15,21 @@ not_found_handling = "single-page-application"
 [[d1_databases]]
 binding = "DB"
 database_name = "pantaw"
-database_id = "REPLACE_AFTER_CREATE"   # `wrangler d1 create pantaw` akan output ID
+database_id = "70b13a79-b2b1-4148-862f-c12e018a3668"   # created via `wrangler d1 create pantaw`
 migrations_dir = "./migrations"
 
 # KV Namespaces
 [[kv_namespaces]]
 binding = "SESSION_KV"
-id = "REPLACE_AFTER_CREATE"
+id = "5ef2ea47791b4a90ae84a602638a4198"
 
 [[kv_namespaces]]
 binding = "RATE_KV"
-id = "REPLACE_AFTER_CREATE"
+id = "4e22de223a9a4d9e95c9184a1e20a9d3"
 
 [[kv_namespaces]]
 binding = "CACHE_KV"
-id = "REPLACE_AFTER_CREATE"
+id = "9dded0f287074798beadd4fd5e394aec"
 
 # Workers Rate Limiting binding (per-token, untuk /api/v1/ingest)
 [[unsafe.bindings]]
