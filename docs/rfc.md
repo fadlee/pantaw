@@ -56,26 +56,28 @@ Agent (di setiap server)
 
 ```
 Agent (di setiap server)
-  └─── HTTPS POST /ingest ──→ Cloudflare Workers (API)
-                                    ├─── D1 (penyimpanan metrik)
-                                    ├─── KV (session, rate-limit, latest-metrics cache)
-                                    └─── Cloudflare Pages (dashboard SPA)
-                                              └─── Browser (dashboard)
+  └─── HTTPS POST /api/v1/ingest ──→ Cloudflare Worker (Hono + Static Assets)
+                                              ├─── D1 (penyimpanan metrik)
+                                              ├─── KV (session, rate-limit, latest-metrics cache)
+                                              └─── Static Assets (SPA bundle) → Browser
 
-Workers Cron Trigger (alert + status checker, tiap 2 menit)
+Worker Cron Trigger (alert + status checker, tiap 2 menit)
 ```
+
+Server (Hono) dan SPA (React) di-bundle dalam **satu Vite project** dan di-deploy sebagai **satu Worker** dengan Workers Static Assets. Tidak ada deployment terpisah, tidak ada CORS, dan client memanggil API via Hono RPC client untuk type-safety end-to-end.
 
 **Perubahan dari arsitektur referensi:**
 
 | Komponen | Beszel | Pantaw |
 |---|---|---|
 | Transport agent→hub | SSH reverse tunnel | HTTPS POST |
-| Runtime hub | Go binary (PocketBase) | Cloudflare Workers (TypeScript) |
+| Runtime hub | Go binary (PocketBase) | Cloudflare Worker (TypeScript + Hono) |
 | Database | SQLite (file di disk) | D1 (SQLite-compatible) |
 | State management | In-memory PocketBase | Stateless Workers + D1 (status dihitung dari `MAX(metrics.ts)`) |
-| Auth | PocketBase built-in | JWT + API Key, diverifikasi di Workers |
-| Dashboard UI | PocketBase auto-UI | SPA (React/Vite) di Cloudflare Pages |
-| Alert scheduler | PocketBase hooks | Workers Cron Trigger |
+| Auth | PocketBase built-in | JWT (HS256) + API Key, diverifikasi di Worker |
+| Dashboard UI | React SPA di-embed di binary Go | React SPA di Workers Static Assets (1 Worker dengan API) |
+| Client-server contract | PocketBase JS SDK + realtime | Hono RPC (type-safe) + polling via TanStack Query |
+| Alert scheduler | PocketBase hooks | Worker Cron Trigger |
 | Hosting | VPS (berbayar) | Cloudflare free tier |
 
 **Catatan desain:** Versi awal RFC ini sempat memasukkan Durable Objects untuk per-agent state, buffer metrik, dan deteksi agent down via DO Alarms. Setelah dihitung ulang, kombinasi ingest + alarm DO untuk 10 agent menghasilkan ~1,3 juta DO invocation/bulan, sudah melampaui DO free tier (1M/bulan), padahal manfaatnya bisa dicapai cukup dengan kolom `last_seen` di D1 atau perhitungan dinamis dari `MAX(metrics.ts)`. Karena MVP juga tidak membutuhkan WebSocket fan-out (lihat section 11 #3), DO didrop dari arsitektur. Dapat ditambahkan kembali di fase berikutnya bila real-time push diperlukan.
@@ -84,9 +86,36 @@ Workers Cron Trigger (alert + status checker, tiap 2 menit)
 
 ## 4. Spesifikasi Komponen
 
-### 4.1 Workers API (Hub Core)
+**Project structure:** Hub Pantaw adalah satu Vite project yang berisi server (Hono Worker) dan SPA (React) dalam satu codebase, di-deploy sebagai satu Cloudflare Worker dengan Workers Static Assets. Layout direktori (lihat 4.0):
 
-Ditulis dalam TypeScript, di-deploy sebagai Cloudflare Worker.
+```
+pantaw/
+├── wrangler.toml
+├── vite.config.ts
+├── package.json
+├── migrations/                    # Wrangler D1 migrations (lihat 4.6)
+├── src/
+│   ├── server/                    # Hono Worker (lihat 4.1)
+│   │   ├── index.ts              # app instance + export type AppType
+│   │   ├── routes/                # ingest.ts, auth.ts, systems.ts, alerts.ts
+│   │   ├── middleware/            # auth.ts, rate-limit.ts
+│   │   ├── lib/                   # db.ts, password.ts, jwt.ts
+│   │   └── cron.ts                # scheduled handler
+│   ├── client/                    # SPA React (lihat 4.7)
+│   │   ├── main.tsx
+│   │   ├── components/
+│   │   └── lib/api.ts             # hc<AppType> Hono RPC client
+│   └── shared/                    # tipe & schema dipakai dua sisi
+│       ├── types.ts
+│       └── schemas.ts             # Valibot schemas
+└── tests/
+```
+
+**Disiplin separation:** Client tidak boleh `import` dari `src/server/*`, dan sebaliknya. Tipe & schema bersama hanya melalui `src/shared/*`. ESLint rule `no-restricted-imports` enforce ini.
+
+### 4.1 Server (Hono Worker)
+
+Ditulis dalam TypeScript dengan **Hono** sebagai HTTP framework. Hono native untuk runtime Workers (~14KB), middleware-friendly, dan punya RPC client yang memberi type-safety end-to-end.
 
 **Endpoints:**
 
@@ -101,10 +130,14 @@ Ditulis dalam TypeScript, di-deploy sebagai Cloudflare Worker.
 | `GET` | `/api/v1/alerts` | Daftar alert aktif |
 | `PUT` | `/api/v1/alerts/:id` | Update konfigurasi alert |
 
+**Validasi request:** Semua endpoint pakai `@hono/valibot-validator` dengan schema dari `src/shared/schemas.ts`. Schema yang sama dipakai di SPA untuk validasi form, sehingga tidak ada duplikasi rule.
+
+**Type-safe client:** Server export `type AppType = typeof app`. SPA import tipe ini via `hc<AppType>("/")` dari `hono/client` untuk autocomplete + type-check pada request body, query param, dan response shape.
+
 **Autentikasi dua lapis:**
 
 - **Agent → Hub:** API key stateless, dikirim sebagai header `Authorization: Bearer <key>`. Key di-hash (SHA-256) dan disimpan di D1 table `agent_tokens`.
-- **User → Hub:** Username + password → JWT (RS256, expire 24 jam). JWT di-verify di Workers tanpa DB lookup per-request. Refresh token disimpan di KV dengan TTL 30 hari.
+- **User → Hub:** Username + password → JWT (HS256 dengan claim `kid`, expire 24 jam, lihat 8.3). JWT disimpan di cookie HttpOnly + SameSite=Strict, di-verify di Worker tanpa DB lookup per-request. Refresh token disimpan di KV dengan TTL 30 hari.
 
 ### 4.2 Status & Liveness Tracking (Stateless)
 
@@ -290,19 +323,53 @@ Wrangler maintain tabel `d1_migrations` otomatis untuk track migration yang suda
 - Perubahan kompleks (rename column dengan constraint baru, ubah tipe kolom) butuh pattern: create new table → copy data → drop old → rename. Migrasi forward-only, tidak ada rollback otomatis
 - **Backup sebelum migrasi destructive:** `wrangler d1 export pantaw --output backup.sql`
 
-### 4.7 Dashboard SPA (Cloudflare Pages)
+### 4.7 SPA Dashboard (React + Vite)
 
-Frontend dibangun dengan **React + Vite**, di-deploy ke Cloudflare Pages. Static assets gratis dan unlimited.
+UI Pantaw di-fork dari [Beszel UI](https://github.com/henrygd/beszel/tree/main/internal/site) (MIT-licensed) sebagai starting point. Lapisan data fetching (PocketBase SDK + realtime) di-replace dengan Hono RPC client + polling. Visual design, charts, tables, dan struktur komponen dipertahankan untuk menghemat effort.
 
-Fitur minimal untuk MVP:
+**Stack (mirror Beszel kecuali bagian transport ke server):**
+
+| Aspek | Pilihan |
+|---|---|
+| Framework | React 19 + Vite |
+| Bahasa | TypeScript |
+| Styling | Tailwind CSS 4 |
+| Component primitive | Radix UI |
+| UI pattern | shadcn/ui (komponen di-copy ke `src/client/components/ui/`) |
+| Charts | Recharts |
+| Tables | TanStack Table + TanStack Virtual |
+| Icons | lucide-react |
+| Validation | Valibot (shared dengan server via `src/shared/schemas.ts`) |
+| State (client) | Nanostores (mengikuti Beszel) |
+| Routing | nanostores/router (mengikuti Beszel) |
+| Data fetching | TanStack Query + Hono RPC client (`hc<AppType>`) |
+| i18n | Lingui |
+| Linter/formatter | Biome |
+| Package manager | Bun |
+
+**Fitur Beszel yang di-drop di MVP Pantaw** (untuk fokus + sesuai scope hub baru):
+
+- SMART disk monitoring (butuh agent collector tambahan)
+- Systemd table (butuh agent collector tambahan)
+- OAuth providers, OTP, fingerprint tokens (auth Pantaw cukup password + JWT)
+- Public key copy / SSH-based auth
+- Notifications config kompleks (cukup webhook URL per alert di MVP)
+
+**Fitur MVP yang dipertahankan/ditambahkan:**
 
 - Login page
-- Dashboard: daftar semua system dengan status real-time
+- Dashboard: daftar semua system dengan status (polling 30s ke `CACHE_KV`)
 - System detail: grafik CPU, memory, disk, network (time range: 1j, 6j, 24j, 7d)
 - Alert management: buat dan edit alert threshold
-- Settings: tambah/hapus system, generate API key
+- Settings: tambah/hapus system, generate API key, manage user (single admin di MVP)
+- Theme: dark mode default + light mode
+- i18n: English + Bahasa Indonesia (locale lain dari Beszel di-keep namun tidak di-translate aktif)
 
-Komunikasi ke Workers API menggunakan JWT yang disimpan di `localStorage` (atau cookie HttpOnly untuk keamanan lebih).
+**Realtime → polling:** Pemanggilan `pb.collection(...).subscribe(...)` di Beszel UI digantikan dengan TanStack Query `useQuery({ refetchInterval: 30000 })`. Indicator "last updated X seconds ago" ditampilkan untuk transparansi.
+
+**Auth di SPA:** JWT disimpan di cookie HttpOnly (di-set oleh server saat login), bukan di `localStorage`. Browser otomatis kirim cookie pada same-origin request, tidak perlu manual `Authorization` header. SameSite=Strict cukup untuk CSRF protection di setup self-hosted single-admin.
+
+**Atribusi:** README dan `NOTICE` mengkredit Beszel + henrygd. License MIT asli dipertahankan untuk file yang di-copy.
 
 ---
 
@@ -482,30 +549,38 @@ Mitigasi jika mendekati batas D1 writes:
 
 ### Fase 1 — Foundation (Minggu 1–2)
 
-- [ ] Inisialisasi project Cloudflare Workers dengan Wrangler
+- [ ] Inisialisasi mono-project: Vite + Hono + React, struktur folder `src/{server,client,shared}` (lihat 4)
+- [ ] Setup `wrangler.toml` dengan Workers Static Assets (`directory = ./dist/client`, `not_found_handling = single-page-application`)
+- [ ] Setup Vite plugin: `@cloudflare/vite-plugin` + `@hono/vite-dev-server`
+- [ ] ESLint rule `no-restricted-imports` untuk enforce separation client/server
 - [ ] Setup struktur `migrations/` dengan `0001_initial.sql` (semua tabel)
 - [ ] Setup D1 database (lokal + remote), apply migration awal (`metrics` pakai composite PK `(system_id, ts)` + `WITHOUT ROWID`)
 - [ ] Konfigurasi `INGEST_LIMITER` (Workers Rate Limiting binding) di `wrangler.toml`
-- [ ] Implementasi endpoint `/api/v1/ingest`: validasi token, validasi `ts` window (clock skew), `INSERT OR IGNORE`, write-through `CACHE_KV`
+- [ ] Implementasi endpoint `/api/v1/ingest` (Hono + Valibot validator): validasi token, validasi `ts` window (clock skew), `INSERT OR IGNORE`, write-through `CACHE_KV`
 - [ ] Unit test: auth (token valid/invalid/expired), ingest (single/array payload, duplicate retry, clock skew rejection, rate limit)
 
 ### Fase 2 — API Lengkap (Minggu 3–4)
 
-- [ ] Endpoint CRUD systems dan users
-- [ ] Implementasi JWT auth (HS256 dengan `kid` claim, login, refresh, verify)
+- [ ] Endpoint CRUD systems dan users (Hono routes + Valibot schemas di `src/shared/schemas.ts`)
+- [ ] Implementasi JWT auth (HS256 dengan `kid` claim, login, refresh, verify); set/clear cookie HttpOnly + SameSite=Strict
 - [ ] Login throttling via `RATE_KV` (5 attempts / 15 menit per email)
 - [ ] Endpoint metrik historis dengan query time range
 - [ ] KV caching untuk latest metrics (read path dashboard)
 - [ ] Alert table dan cron trigger alert+status checker
+- [ ] Verifikasi Hono RPC client (`hc<AppType>`) bekerja end-to-end (smoke test dari `src/client/lib/api.ts`)
 
 ### Fase 3 — Dashboard (Minggu 5–7)
 
-- [ ] Setup Cloudflare Pages + React + Vite
-- [ ] Halaman login
-- [ ] Dashboard utama: daftar system + status
-- [ ] System detail page: grafik time-series (menggunakan Recharts atau Chart.js)
-- [ ] Alert management UI
-- [ ] Settings: tambah system, generate token
+- [ ] Fork UI Beszel (`internal/site/src/`) ke `src/client/`, sesuaikan path import
+- [ ] Tambah file `NOTICE` + atribusi di README
+- [ ] Replace `lib/api.ts` Beszel: hapus `pocketbase` SDK, ganti dengan Hono RPC client (`hc<AppType>`)
+- [ ] Replace `lib/systemsManager.ts`: ganti `pb.subscribe(...)` dengan TanStack Query polling 30s
+- [ ] Sesuaikan login flow: cookie HttpOnly + endpoint `/api/v1/auth/login`
+- [ ] Hapus komponen fitur yang di-drop: SMART, systemd, OAuth, OTP, fingerprint tokens, public key
+- [ ] Sesuaikan systems-table dengan schema Pantaw (status computed dari `MAX(metrics.ts)`)
+- [ ] Sesuaikan system detail page (charts) dengan endpoint metrik historis Pantaw
+- [ ] Audit i18n: keep struktur Lingui, simplify ke `en` + `id` aktif (locale lain di-keep namun stale)
+- [ ] Smoke test SPA + API jalan barengan via `wrangler dev`
 
 ### Fase 4 — Agent & Polish (Minggu 8–9)
 
@@ -535,13 +610,25 @@ Bagian ini awalnya berisi pertanyaan terbuka yang sudah diputuskan selama review
 
 6. **Migrasi dari Beszel (PocketBase → D1)** — di-defer ke post-MVP. Pantaw ditargetkan untuk pengguna baru atau pengguna Beszel yang nyaman setup ulang. Outline migrasi cukup didokumentasikan sebagai future work di README.
 
+7. **UI dashboard** — di-fork dari Beszel UI (MIT) sebagai starting point, lapisan data fetching diganti dengan Hono RPC client + TanStack Query polling. Visual design, charts, tables, dan struktur komponen dipertahankan untuk menghemat effort. Fitur Beszel yang tidak relevan di Pantaw MVP (SMART, systemd, OAuth/OTP, fingerprint, SSH key) di-drop. Lihat section 4.7.
+
+8. **Mono-project Vite + Hono** — server (Hono Worker) dan SPA (React) di-bundle dalam satu Vite project, di-deploy sebagai satu Cloudflare Worker dengan Workers Static Assets. Keuntungan: single deployment, no CORS, type-safe API client via Hono RPC, shared Valibot schemas. Lihat section 4 (intro) dan 4.1.
+
+9. **Validation library** — **Valibot**. Bundle size lebih kecil dari Zod (~1KB tree-shaken vs ~13KB), konsisten dengan Beszel UI yang akan di-fork, dan punya integrasi resmi dengan Hono via `@hono/valibot-validator`.
+
+10. **Frontend hosting** — **Workers Static Assets**, bukan Cloudflare Pages. Workers Static Assets sekarang adalah rekomendasi resmi Cloudflare untuk full-stack apps; cocok dengan mono-project pattern dan menghilangkan kebutuhan CORS antara API dan UI.
+
 ---
 
 ## 12. Referensi
 
-- [Beszel repository](https://github.com/henrygd/beszel) (inspirasi)
+- [Beszel repository](https://github.com/henrygd/beszel) (inspirasi + UI source)
 - [Cloudflare Workers pricing & limits](https://developers.cloudflare.com/workers/platform/pricing/)
 - [Cloudflare D1 documentation](https://developers.cloudflare.com/d1/)
+- [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)
 - [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/) (post-MVP candidate)
-- [PocketBase documentation](https://pocketbase.io/docs/)
+- [Hono](https://hono.dev/) — web framework untuk Workers
+- [Hono RPC](https://hono.dev/docs/guides/rpc) — type-safe client
+- [Valibot](https://valibot.dev/) — schema validation
+- [PocketBase documentation](https://pocketbase.io/docs/) (referensi Beszel)
 
