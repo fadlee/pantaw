@@ -1,23 +1,25 @@
-# RFC: Beszel Cloudflare Hub
+# RFC: Pantaw
 
 **Status:** Draft  
 **Tanggal:** 2026-05-26  
 **Penulis:** -  
-**Repo asal:** https://github.com/henrygd/beszel  
+**Inspirasi:** https://github.com/henrygd/beszel  
 
 ---
 
 ## 1. Ringkasan
 
-RFC ini mengusulkan penulisan ulang komponen **hub** dari Beszel — platform monitoring server ringan — agar dapat berjalan sepenuhnya di atas **Cloudflare free tier** tanpa memerlukan VPS atau server tersendiri. Komponen **agent** tidak diubah secara fundamental; hanya mekanisme pengiriman metrik yang disesuaikan dari SSH tunnel ke HTTPS POST.
+RFC ini mengusulkan **Pantaw** — platform monitoring server ringan yang berjalan sepenuhnya di atas **Cloudflare free tier** tanpa memerlukan VPS atau server tersendiri. Pantaw terinspirasi dari [Beszel](https://github.com/henrygd/beszel) dan mengadopsi pendekatan agent-hub yang serupa, tetapi diimplementasikan ulang untuk runtime edge.
 
-Nama proyek fork ini: **Beszel Edge Hub** (sementara).
+Nama "Pantaw" diambil dari kata "pantau" (Bahasa Indonesia: memantau / memonitor).
+
+**Catatan kompatibilitas:** Pantaw bukan fork drop-in dari Beszel. Wire protocol agent→hub berbeda (HTTPS POST vs SSH tunnel) dan skema data tidak identik. Agent Pantaw adalah implementasi independen yang terinspirasi dari arsitektur Beszel agent.
 
 ---
 
 ## 2. Latar Belakang & Motivasi
 
-Beszel hub saat ini berjalan di atas **PocketBase** — sebuah binary Go yang membutuhkan:
+Beszel hub berjalan di atas **PocketBase** — sebuah binary Go yang membutuhkan:
 
 - Filesystem persisten untuk database SQLite
 - Long-running process (tidak bisa di-terminate antar request)
@@ -25,17 +27,19 @@ Beszel hub saat ini berjalan di atas **PocketBase** — sebuah binary Go yang me
 
 Ketiga kebutuhan ini tidak kompatibel dengan model eksekusi Cloudflare Workers (stateless, ephemeral, request-response). Akibatnya, menjalankan hub Beszel gratis mengharuskan pengguna memiliki VPS atau server sendiri.
 
+Pantaw mengambil pendekatan berbeda: arsitektur dirancang ulang dari awal untuk runtime edge, sehingga bisa berjalan di Cloudflare free tier tanpa kompromi pada experience pengguna.
+
 **Tujuan RFC ini:**
 
-1. Merancang arsitektur hub baru yang sepenuhnya berjalan di Cloudflare free tier
-2. Mempertahankan kompatibilitas fungsional dengan Beszel agent yang sudah ada
+1. Merancang arsitektur Pantaw yang sepenuhnya berjalan di Cloudflare free tier
+2. Mempertahankan kompatibilitas konseptual dengan model agent-hub Beszel (memudahkan onboarding bagi pengguna Beszel)
 3. Mendokumentasikan trade-off, batasan, dan keputusan desain
 
 ---
 
 ## 3. Perubahan Arsitektur
 
-### 3.1 Arsitektur Lama (Beszel Original)
+### 3.1 Arsitektur Referensi (Beszel)
 
 ```
 Agent (di setiap server)
@@ -48,12 +52,12 @@ Agent (di setiap server)
 - Hub menyajikan dashboard via web server PocketBase
 - SQLite file disimpan di disk VPS
 
-### 3.2 Arsitektur Baru (Beszel Edge Hub)
+### 3.2 Arsitektur Pantaw
 
 ```
 Agent (di setiap server)
   └─── HTTPS POST /ingest ──→ Cloudflare Workers (API)
-                                    ├─── D1 / Turso (penyimpanan metrik)
+                                    ├─── D1 (penyimpanan metrik)
                                     ├─── KV (session, rate-limit, latest-metrics cache)
                                     └─── Cloudflare Pages (dashboard SPA)
                                               └─── Browser (dashboard)
@@ -61,16 +65,16 @@ Agent (di setiap server)
 Workers Cron Trigger (alert + status checker, tiap 2 menit)
 ```
 
-**Perubahan kunci:**
+**Perubahan dari arsitektur referensi:**
 
-| Komponen | Lama | Baru |
+| Komponen | Beszel | Pantaw |
 |---|---|---|
 | Transport agent→hub | SSH reverse tunnel | HTTPS POST |
 | Runtime hub | Go binary (PocketBase) | Cloudflare Workers (TypeScript) |
-| Database | SQLite (file di disk) | D1 (SQLite-compatible) atau Turso |
+| Database | SQLite (file di disk) | D1 (SQLite-compatible) |
 | State management | In-memory PocketBase | Stateless Workers + D1 (status dihitung dari `MAX(metrics.ts)`) |
 | Auth | PocketBase built-in | JWT + API Key, diverifikasi di Workers |
-| Dashboard UI | PocketBase auto-UI | SPA (React/Vue) di Cloudflare Pages |
+| Dashboard UI | PocketBase auto-UI | SPA (React/Vite) di Cloudflare Pages |
 | Alert scheduler | PocketBase hooks | Workers Cron Trigger |
 | Hosting | VPS (berbayar) | Cloudflare free tier |
 
@@ -134,7 +138,7 @@ Ingest hanya melakukan **1 D1 write** ke tabel `metrics`. Tabel `systems` tidak 
 
 ### 4.3 Database Schema
 
-Database: **Cloudflare D1** (primer) atau **Turso** (opsional, untuk multi-region read).
+Database: **Cloudflare D1** (SQLite-compatible).
 
 #### Tabel `systems`
 
@@ -263,37 +267,31 @@ Komunikasi ke Workers API menggunakan JWT yang disimpan di `localStorage` (atau 
 
 ---
 
-## 5. Perubahan pada Agent
+## 5. Agent
 
-Agent Beszel saat ini menggunakan SSH reverse tunnel. Untuk kompatibilitas dengan Workers, agent perlu dimodifikasi:
+Pantaw membutuhkan agent yang berjalan di tiap server target untuk mengumpulkan metrik dan mengirimkannya ke hub via HTTPS POST. Untuk MVP, agent ditulis sebagai binary Go terpisah dengan footprint minimal (mirip Beszel agent dalam semangat dan ukuran).
 
-### Opsi A — Modifikasi minimal (rekomendasi)
-
-Tambahkan mode baru `--transport http` pada binary agent Go yang sudah ada. Dalam mode ini, agent melakukan:
+**Karakteristik agent:**
 
 ```
-Loop setiap 30 detik:
-  1. Kumpulkan metrik (CPU, mem, disk, dll) — sama seperti sekarang
-  2. Serialize ke JSON
-  3. HTTPS POST ke {HUB_URL}/api/v1/ingest
+Loop setiap INTERVAL detik (default 30):
+  1. Kumpulkan metrik (CPU, mem, disk, net, load, temp)
+  2. Optional: kumpulkan container stats (Docker)
+  3. Serialize ke JSON
+  4. HTTPS POST ke {HUB_URL}/api/v1/ingest
      Header: Authorization: Bearer {AGENT_TOKEN}
-  4. Jika response bukan 2xx, log error dan retry di interval berikutnya
+  5. Jika response bukan 2xx, log error dan retry di interval berikutnya
 ```
 
-Konfigurasi agent:
+**Konfigurasi agent:**
 
 ```env
 HUB_URL=https://your-hub.workers.dev
 AGENT_TOKEN=<api-key-dari-dashboard>
-TRANSPORT=http          # default: ssh (backward compat)
 INTERVAL=30             # detik
 ```
 
-### Opsi B — Fork terpisah
-
-Buat `beszel-agent-edge` sebagai binary Go terpisah yang hanya mendukung HTTP transport. Lebih bersih tapi butuh maintenance dua codebase.
-
-**Rekomendasi: Opsi A** — modifikasi minimal pada agent, backward compatible.
+**Catatan tentang Beszel agent:** Karena wire protocol Pantaw (HTTPS POST) berbeda dari Beszel (SSH tunnel), Beszel agent tidak bisa langsung digunakan. Pengguna existing Beszel yang ingin mencoba Pantaw perlu mengganti binary agent. Tool migrasi dari PocketBase ke D1 di-defer ke post-MVP (lihat section 11).
 
 ---
 
@@ -445,7 +443,7 @@ Mitigasi jika mendekati batas D1 writes:
 
 ### Fase 4 — Agent & Polish (Minggu 8–9)
 
-- [ ] Fork/modifikasi agent: tambah mode HTTP transport
+- [ ] Implementasi Pantaw agent (Go binary): collector + HTTPS POST loop
 - [ ] End-to-end testing: agent → Workers → D1 → Dashboard
 - [ ] Load testing kalkulasi free tier
 - [ ] Dokumentasi setup (README, env vars)
@@ -453,23 +451,29 @@ Mitigasi jika mendekati batas D1 writes:
 
 ---
 
-## 11. Pertanyaan Terbuka
+## 11. Keputusan Desain (Resolved)
 
-1. **Nama proyek** — tetap `beszel-edge` atau nama baru?
-2. **Opsi Turso** — perlu diimplementasikan dari awal, atau sebagai plugin opsional di fase berikutnya?
-3. **WebSocket support** — apakah real-time push dari Durable Objects perlu di MVP, atau cukup polling?
-4. **Multi-user** — apakah MVP perlu sistem sharing system antar user, atau cukup single admin dulu?
-5. **Docker stats** — agent meneruskan container stats; apakah perlu schema khusus atau cukup masuk ke kolom `extra` JSON?
-6. **Backward compatibility** — jika ada pengguna Beszel original yang ingin migrasi, perlu tool migrasi dari PocketBase SQLite ke D1?
+Bagian ini awalnya berisi pertanyaan terbuka yang sudah diputuskan selama review RFC.
+
+1. **Nama proyek** — ditetapkan: **Pantaw** (dari kata "pantau"). Tidak terikat ke branding Beszel agar punya identitas sendiri.
+
+2. **Database alternatif (Turso)** — ditolak untuk MVP. Mendukung dua database dari awal menambah kompleksitas pada query layer, migration, dan testing tanpa nilai konkret untuk use case self-hosted personal. D1 menjadi satu-satunya pilihan. Abstraction layer DB dapat ditambahkan post-MVP bila ada kebutuhan multi-region read.
+
+3. **WebSocket / real-time push** — ditolak untuk MVP. Dashboard menggunakan polling 30 detik. WebSocket di Cloudflare Workers membutuhkan Durable Objects sebagai endpoint persisten, dan DO sudah didrop dari MVP karena alasan free tier (lihat section 3.2 "Catatan desain"). Real-time push masuk ke roadmap post-MVP bersama DO bila ada kebutuhan nyata.
+
+4. **Multi-user** — schema (`users.role`, `users.system_ids`) tetap mendukung multi-user agar tidak perlu migration di masa depan. Namun UI dan endpoint enforcement di MVP fokus ke skenario **single admin**. Sharing system antar user, invite flow, dan permission UI masuk ke roadmap post-MVP.
+
+5. **Docker / container stats** — disimpan sebagai JSON dalam kolom `metrics.extra`, bukan tabel terdedikasi. Tabel `container_metrics` akan menyebabkan write amplification (1 row per container per ingest) dan dengan cepat melampaui kuota D1 writes free tier. Dashboard MVP cukup menampilkan snapshot container terkini dari kolom `extra`. Tabel terpisah dapat dipertimbangkan post-MVP bila ada kebutuhan time-series per-container.
+
+6. **Migrasi dari Beszel (PocketBase → D1)** — di-defer ke post-MVP. Pantaw ditargetkan untuk pengguna baru atau pengguna Beszel yang nyaman setup ulang. Outline migrasi cukup didokumentasikan sebagai future work di README.
 
 ---
 
 ## 12. Referensi
 
-- [Beszel repository](https://github.com/henrygd/beszel)
+- [Beszel repository](https://github.com/henrygd/beszel) (inspirasi)
 - [Cloudflare Workers pricing & limits](https://developers.cloudflare.com/workers/platform/pricing/)
 - [Cloudflare D1 documentation](https://developers.cloudflare.com/d1/)
-- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
-- [Turso pricing](https://turso.tech/pricing)
+- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/) (post-MVP candidate)
 - [PocketBase documentation](https://pocketbase.io/docs/)
 
