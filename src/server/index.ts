@@ -15,7 +15,39 @@ export type Env = {
 
 const app = new Hono<{ Bindings: Env }>()
 
-app.get("/api/v1/health", (c) => c.json({ status: "ok", service: "pantaw" }))
+/**
+ * Health check endpoint. Tidak di-versioning karena bukan kontrak API
+ * yang akan berubah. Aman dipakai untuk uptime monitoring eksternal.
+ *
+ * Mengembalikan status server dan basic dependency check (D1).
+ */
+app.get("/api/health", async (c) => {
+	const startedAt = Date.now()
+	let dbOk = false
+	try {
+		const row = await c.env.DB.prepare("SELECT 1 as ok").first<{ ok: number }>()
+		dbOk = row?.ok === 1
+	} catch {
+		dbOk = false
+	}
+	return c.json(
+		{
+			status: dbOk ? "ok" : "degraded",
+			service: "pantaw",
+			timestamp: new Date().toISOString(),
+			checks: {
+				db: dbOk,
+			},
+			latency_ms: Date.now() - startedAt,
+		},
+		dbOk ? 200 : 503
+	)
+})
+
+// Alias /v1/ untuk backward-compat dengan client lama yang sudah pakai
+// versi-prefixed path. Bisa dihapus saat tidak ada konsumen.
+app.get("/api/v1/health", (c) => c.redirect("/api/health", 301))
+
 app.route("/api/v1/ingest", ingest)
 
 export type AppType = typeof app
