@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "./lib/api"
+import { Dashboard } from "./views/Dashboard"
+import { LoginForm } from "./views/LoginForm"
+import { SetupForm } from "./views/SetupForm"
 
 type SetupStatus = { needs_setup: boolean }
 type Me = { id: string; email: string; role: "admin" | "user" }
@@ -48,37 +51,4 @@ export default function App() {
 	}
 
 	return <Dashboard user={me.data} />
-}
-
-function SetupForm() {
-	return (
-		<Center>
-			<h1 className="font-semibold text-2xl">Welcome to Pantaw</h1>
-			<p className="text-sm text-zinc-400">First-time setup form akan dipasang berikutnya.</p>
-		</Center>
-	)
-}
-
-function LoginForm() {
-	return (
-		<Center>
-			<h1 className="font-semibold text-2xl">Pantaw</h1>
-			<p className="text-sm text-zinc-400">Login form akan dipasang berikutnya.</p>
-		</Center>
-	)
-}
-
-function Dashboard({ user }: { user: Me }) {
-	return (
-		<Center>
-			<h1 className="font-semibold text-2xl">Dashboard</h1>
-			<p className="text-sm text-zinc-400">
-				Halo, <span className="font-mono">{user.email}</span> ({user.role})
-			</p>
-		</Center>
-	)
-}
-
-function Center({ children }: { children: React.ReactNode }) {
-	return <div className="flex h-full flex-col items-center justify-center gap-2">{children}</div>
 }
