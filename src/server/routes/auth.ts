@@ -185,9 +185,12 @@ async function userCount(env: Env): Promise<number> {
 }
 
 function setSessionCookie(c: Context<{ Bindings: Env; Variables: UserAuthVars }>, token: string) {
+	// Secure flag hanya di-set saat HTTPS (production).
+	// Di dev (HTTP localhost), Secure flag mencegah browser menyimpan cookie.
+	const isSecure = new URL(c.req.url).protocol === "https:"
 	setCookie(c, SESSION_COOKIE, token, {
 		httpOnly: true,
-		secure: true,
+		secure: isSecure,
 		sameSite: "Strict",
 		path: "/",
 		maxAge: SESSION_TTL_SEC,

@@ -35,22 +35,13 @@ const App = memo(() => {
 	const page = useStore($router)
 
 	useEffect(() => {
-		// Pantaw: verifyAuth via /me endpoint (cookie-based, no PocketBase)
-		verifyAuth().then((ok) => {
-			if (!ok) return
-			// Check for updates (stub — Pantaw tidak punya update endpoint)
-			if (isAdmin()) {
-				// TODO: implement update check endpoint
-				void (null as unknown as UpdateInfo)
-			}
-			updateUserSettings()
-			systemsManager.init()
-			systemsManager
-				.refresh()
-				.then(systemsManager.subscribe)
-				.then(alertManager.refresh)
-				.then(alertManager.subscribe)
-		})
+		// Init systems + alerts setelah authenticated
+		systemsManager.init()
+		systemsManager
+			.refresh()
+			.then(systemsManager.subscribe)
+			.then(alertManager.refresh)
+			.then(alertManager.subscribe)
 		return () => {
 			alertManager.unsubscribe()
 			systemsManager.unsubscribe()
@@ -82,6 +73,14 @@ const Layout = () => {
 	const copyContent = useStore($copyContent)
 	const direction = useStore($direction)
 	const { layoutWidth } = useStore($userSettings, { keys: ["layoutWidth"] })
+
+	// Cek sesi aktif saat pertama kali load (cookie-based auth)
+	useEffect(() => {
+		verifyAuth().then((ok) => {
+			if (!ok) return
+			updateUserSettings()
+		})
+	}, [])
 
 	useEffect(() => {
 		document.documentElement.dir = direction
