@@ -124,7 +124,7 @@ Default `timeout_seconds` = 90 (3× interval polling 30 detik).
 POST /api/v1/ingest
   1. Verify Bearer token → resolve system_id
   2. Validate payload (schema, ts dalam window wajar)
-  3. INSERT OR IGNORE INTO metrics (system_id, ts, ...)  -- idempotent via UNIQUE(system_id, ts)
+  3. INSERT OR IGNORE INTO metrics (system_id, ts, ...)  -- idempotent via PK (system_id, ts)
   4. Update CACHE_KV: metrics:{system_id}:latest = payload (TTL 90s)
   5. Update agent_tokens.last_used (best-effort, boleh di-skip jika hot path)
   6. Return 204
@@ -134,7 +134,7 @@ Ingest hanya melakukan **1 D1 write** ke tabel `metrics`. Tabel `systems` tidak 
 
 **Deteksi agent down:** dilakukan oleh cron trigger (lihat 4.5) yang menscan systems dan membandingkan `MAX(metrics.ts)` dengan `now - timeout_seconds`. Jika transition `up → down`, kirim webhook dan log ke `alerts.last_fired`.
 
-**Idempotensi:** Tambah constraint `UNIQUE(system_id, ts)` ke tabel `metrics`. Jika agent retry POST yang sudah berhasil tertulis, `INSERT OR IGNORE` mengabaikan duplikat tanpa error.
+**Idempotensi:** `metrics` menggunakan PK composite `(system_id, ts)`. Jika agent retry POST yang sudah berhasil tertulis, `INSERT OR IGNORE` mengabaikan duplikat tanpa error.
 
 ### 4.3 Database Schema
 
@@ -178,7 +178,6 @@ CREATE TABLE users (
 
 ```sql
 CREATE TABLE metrics (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
   system_id  TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
   ts         INTEGER NOT NULL,         -- unix timestamp, resolusi 30 detik
   cpu        REAL,                     -- persen (0-100)
@@ -195,10 +194,17 @@ CREATE TABLE metrics (
   load15     REAL,
   temp       REAL,                     -- celsius, nullable
   extra      TEXT,                     -- JSON: GPU, container stats, dll
-  UNIQUE(system_id, ts)                 -- idempotensi ingest retry
-);
+  PRIMARY KEY (system_id, ts)          -- juga menjamin idempotensi ingest retry
+) WITHOUT ROWID;
 
-CREATE INDEX idx_metrics_system_ts ON metrics (system_id, ts DESC);
+-- Catatan desain:
+-- 1. Tidak ada kolom `id` surrogate. PK composite (system_id, ts) sudah
+--    cukup untuk semua query path (ingest, dashboard, cron status).
+-- 2. WITHOUT ROWID menyimpan data langsung di PK btree, tidak ada rowid
+--    btree terpisah. Hemat ~30–40% storage dan 1 btree write per insert.
+-- 3. Tidak perlu CREATE INDEX (system_id, ts DESC) karena SQLite scan
+--    backward over PK btree untuk ORDER BY ts DESC tanpa penalty.
+-- 4. INSERT OR IGNORE menggunakan konflik PK untuk idempotensi retry.
 ```
 
 #### Tabel `alerts`
@@ -351,8 +357,8 @@ Asumsi: **10 server**, polling interval **30 detik**, **20 dashboard page load/h
 
 | Storage | Estimasi | Kuota D1 Free | Catatan |
 |---|---|---|---|
-| Metrics row size | ~150 bytes/row | — | tergantung ukuran kolom `extra` |
-| 10 server, 30d retention | 10 × 28.800/10 × 30 × 150 B ≈ 130 MB | 5 GB total per akun | <3% |
+| Metrics row size | ~100 bytes/row | — | tergantung ukuran kolom `extra`; WITHOUT ROWID + PK composite hemat ~30–40% vs schema dengan `id` surrogate + secondary index |
+| 10 server, 30d retention | 10 × 2.880/hari × 30 × 100 B ≈ 85 MB | 5 GB total per akun | <2% |
 
 **Kesimpulan:** Untuk pemakaian personal hingga ~30 server, semua komponen masih jauh di bawah batas free tier. Batas pertama yang akan tercapai adalah **Workers 100K request/hari** saat memantau lebih dari ~34 server dengan interval 30 detik. Storage D1 baru jadi concern saat retensi dinaikkan ke ratusan hari atau jumlah agent puluhan kali lipat.
 
@@ -419,7 +425,7 @@ Mitigasi jika mendekati batas D1 writes:
 ### Fase 1 — Foundation (Minggu 1–2)
 
 - [ ] Inisialisasi project Cloudflare Workers dengan Wrangler
-- [ ] Setup D1 database, migrate schema (termasuk constraint `UNIQUE(system_id, ts)` di `metrics`)
+- [ ] Setup D1 database, migrate schema (`metrics` pakai composite PK `(system_id, ts)` + `WITHOUT ROWID`)
 - [ ] Implementasi endpoint `/api/v1/ingest` dengan autentikasi API key
 - [ ] Implementasi `CACHE_KV` write-through pada path ingest
 - [ ] Unit test untuk auth dan ingestion logic (termasuk skenario retry/duplikat)
