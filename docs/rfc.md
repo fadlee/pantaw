@@ -137,7 +137,7 @@ CREATE TABLE systems (
 CREATE TABLE users (
   id           TEXT PRIMARY KEY,
   email        TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,         -- bcrypt
+  password_hash TEXT NOT NULL,         -- PHC string: $pbkdf2-sha256$i=...$salt$hash
   role         TEXT DEFAULT 'user',    -- admin | user
   created_at   INTEGER NOT NULL,
   system_ids   TEXT DEFAULT '[]'       -- JSON array: system ID yang boleh diakses
@@ -346,7 +346,14 @@ Mitigasi jika mendekati batas Workers:
 
 ### 8.3 Autentikasi User
 
-- Password di-hash dengan bcrypt (cost factor 12)
+- Password di-hash dengan **PBKDF2-SHA256** via WebCrypto (`crypto.subtle.deriveBits`):
+  - Iterations: 600.000 (rekomendasi OWASP 2023)
+  - Salt: 16 bytes random per password
+  - Output: 32 bytes derived key
+  - Disimpan dalam format PHC string: `$pbkdf2-sha256$i=<iter>$<base64-salt>$<base64-hash>` agar mudah upgrade algoritma/iterations di kemudian hari
+  - Pilihan ini menggantikan bcrypt karena bcrypt cost ≥10 melebihi CPU limit 10ms Workers free tier; PBKDF2 native via WebCrypto tetap muat dalam budget
+  - Saat verify sukses, jika iteration count tersimpan < `ITERATIONS` saat ini, hash di-rehash otomatis (transparent upgrade)
+- Login throttling: maksimal 5 attempts per 15 menit per email (bukan per IP, karena IP mudah dirotasi). Disimpan di `RATE_KV`
 - JWT menggunakan RS256 (private key disimpan di Workers Secret)
 - JWT expire 24 jam; refresh token 30 hari disimpan di KV
 
