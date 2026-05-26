@@ -40,7 +40,7 @@ export default function Navbar() {
 			<AddSystemDialog open={addSystemDialogOpen} setOpen={setAddSystemDialogOpen} />
 
 			<Link
-				href={basePath}
+				href={basePath || "/"}
 				aria-label="Home"
 				className="p-2 ps-0 me-3 group"
 				onMouseEnter={runOnce(() => import("@/components/routes/home"))}
