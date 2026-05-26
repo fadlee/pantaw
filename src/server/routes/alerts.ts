@@ -5,10 +5,6 @@ import type { Env } from "../index"
 import type { UserAuthVars } from "../middleware/user-auth"
 import { requireAdmin, userAuth } from "../middleware/user-auth"
 
-const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
-
-app.use("*", userAuth)
-
 type AlertRow = {
 	id: string
 	system_id: string
@@ -35,107 +31,57 @@ function rowToResponse(row: AlertRow) {
 	}
 }
 
-// GET /api/v1/alerts - list semua alert; filter ?system_id=...
-app.get("/", async (c) => {
-	const systemId = c.req.query("system_id")
-	const sql = systemId
-		? "SELECT * FROM alerts WHERE system_id = ? ORDER BY id"
-		: "SELECT * FROM alerts ORDER BY system_id, id"
-	const stmt = c.env.DB.prepare(sql)
-	const bound = systemId ? stmt.bind(systemId) : stmt
-	const { results } = await bound.all<AlertRow>()
-	return c.json(results.map(rowToResponse))
-})
-
-// POST /api/v1/alerts - tambah alert (admin only)
-app.post("/", requireAdmin, vValidator("json", CreateAlertBodySchema), async (c) => {
-	const body = c.req.valid("json")
-
-	const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(body.system_id).first()
-	if (!exists) return c.json({ error: "system_not_found" }, 404)
-
-	const id = crypto.randomUUID()
-	const enabled = body.enabled === false ? 0 : 1
-	const durationS = body.duration_s ?? 60
-
-	await c.env.DB.prepare(
-		`INSERT INTO alerts (id, system_id, metric, threshold, operator, duration_s, enabled, webhook_url)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-	)
-		.bind(
-			id,
-			body.system_id,
-			body.metric,
-			body.threshold,
-			body.operator,
-			durationS,
-			enabled,
-			body.webhook_url ?? null
-		)
-		.run()
-
-	const row = await c.env.DB.prepare("SELECT * FROM alerts WHERE id = ?").bind(id).first<AlertRow>()
-	if (!row) return c.json({ error: "create_failed" }, 500)
-	return c.json(rowToResponse(row), 201)
-})
-
-// PUT /api/v1/alerts/:id - update partial
-app.put("/:id", requireAdmin, vValidator("json", UpdateAlertBodySchema), async (c) => {
-	const id = c.req.param("id")
-	const body = c.req.valid("json")
-
-	const updates: string[] = []
-	const values: (string | number | null)[] = []
-	if (body.metric !== undefined) {
-		updates.push("metric = ?")
-		values.push(body.metric)
-	}
-	if (body.operator !== undefined) {
-		updates.push("operator = ?")
-		values.push(body.operator)
-	}
-	if (body.threshold !== undefined) {
-		updates.push("threshold = ?")
-		values.push(body.threshold)
-	}
-	if (body.duration_s !== undefined) {
-		updates.push("duration_s = ?")
-		values.push(body.duration_s)
-	}
-	if (body.enabled !== undefined) {
-		updates.push("enabled = ?")
-		values.push(body.enabled ? 1 : 0)
-	}
-	if (body.webhook_url !== undefined) {
-		updates.push("webhook_url = ?")
-		values.push(body.webhook_url)
-	}
-
-	if (updates.length === 0) {
-		return c.json({ error: "no_fields_to_update" }, 400)
-	}
-
-	values.push(id)
-	const result = await c.env.DB.prepare(`UPDATE alerts SET ${updates.join(", ")} WHERE id = ?`)
-		.bind(...values)
-		.run()
-	if (result.meta.changes === 0) {
-		return c.json({ error: "not_found" }, 404)
-	}
-
-	const row = await c.env.DB.prepare("SELECT * FROM alerts WHERE id = ?").bind(id).first<AlertRow>()
-	if (!row) return c.json({ error: "not_found" }, 404)
-	return c.json(rowToResponse(row))
-})
-
-// DELETE /api/v1/alerts/:id
-app.delete("/:id", requireAdmin, async (c) => {
-	const id = c.req.param("id")
-	const result = await c.env.DB.prepare("DELETE FROM alerts WHERE id = ?").bind(id).run()
-	if (result.meta.changes === 0) {
-		return c.json({ error: "not_found" }, 404)
-	}
-	return c.body(null, 204)
-})
+const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
+	.use("*", userAuth)
+	.get("/", async (c) => {
+		const systemId = c.req.query("system_id")
+		const sql = systemId
+			? "SELECT * FROM alerts WHERE system_id = ? ORDER BY id"
+			: "SELECT * FROM alerts ORDER BY system_id, id"
+		const stmt = c.env.DB.prepare(sql)
+		const bound = systemId ? stmt.bind(systemId) : stmt
+		const { results } = await bound.all<AlertRow>()
+		return c.json(results.map(rowToResponse))
+	})
+	.post("/", requireAdmin, vValidator("json", CreateAlertBodySchema), async (c) => {
+		const body = c.req.valid("json")
+		const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(body.system_id).first()
+		if (!exists) return c.json({ error: "system_not_found" }, 404)
+		const id = crypto.randomUUID()
+		const enabled = body.enabled === false ? 0 : 1
+		const durationS = body.duration_s ?? 60
+		await c.env.DB.prepare(
+			`INSERT INTO alerts (id, system_id, metric, threshold, operator, duration_s, enabled, webhook_url)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		).bind(id, body.system_id, body.metric, body.threshold, body.operator, durationS, enabled, body.webhook_url ?? null).run()
+		const row = await c.env.DB.prepare("SELECT * FROM alerts WHERE id = ?").bind(id).first<AlertRow>()
+		if (!row) return c.json({ error: "create_failed" }, 500)
+		return c.json(rowToResponse(row), 201)
+	})
+	.put("/:id", requireAdmin, vValidator("json", UpdateAlertBodySchema), async (c) => {
+		const id = c.req.param("id")
+		const body = c.req.valid("json")
+		const updates: string[] = []
+		const values: (string | number | null)[] = []
+		if (body.metric !== undefined) { updates.push("metric = ?"); values.push(body.metric) }
+		if (body.operator !== undefined) { updates.push("operator = ?"); values.push(body.operator) }
+		if (body.threshold !== undefined) { updates.push("threshold = ?"); values.push(body.threshold) }
+		if (body.duration_s !== undefined) { updates.push("duration_s = ?"); values.push(body.duration_s) }
+		if (body.enabled !== undefined) { updates.push("enabled = ?"); values.push(body.enabled ? 1 : 0) }
+		if (body.webhook_url !== undefined) { updates.push("webhook_url = ?"); values.push(body.webhook_url) }
+		if (updates.length === 0) return c.json({ error: "no_fields_to_update" }, 400)
+		values.push(id)
+		const result = await c.env.DB.prepare(`UPDATE alerts SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run()
+		if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404)
+		const row = await c.env.DB.prepare("SELECT * FROM alerts WHERE id = ?").bind(id).first<AlertRow>()
+		if (!row) return c.json({ error: "not_found" }, 404)
+		return c.json(rowToResponse(row))
+	})
+	.delete("/:id", requireAdmin, async (c) => {
+		const id = c.req.param("id")
+		const result = await c.env.DB.prepare("DELETE FROM alerts WHERE id = ?").bind(id).run()
+		if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404)
+		return c.body(null, 204)
+	})
 
 export default app

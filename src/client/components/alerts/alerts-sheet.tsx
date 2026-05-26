@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
 import { alertInfo } from "@/lib/alerts"
-import { pb } from "@/lib/api"
+import { apiClient } from "@/lib/api"
 import { $alerts, $systems } from "@/lib/stores"
 import { cn, debounce } from "@/lib/utils"
 import type { AlertInfo, AlertRecord, SystemRecord } from "@/types"
@@ -25,8 +25,6 @@ import { ChevronDownIcon, GlobeIcon, ServerIcon } from "lucide-react"
 import { Suspense, lazy, memo, useMemo, useState } from "react"
 
 const Slider = lazy(() => import("@/components/ui/slider"))
-
-const endpoint = "/api/beszel/user-alerts"
 
 const alertDebounce = 400
 
@@ -41,15 +39,106 @@ const failedUpdateToast = (error: unknown) => {
 	})
 }
 
-/** Create or update alerts for a given name and systems */
+// ─── Pantaw alert metric mapping ─────────────────────────────────────────────
+// Beszel alert names → Pantaw metric names
+
+const alertKeyToMetric: Record<string, string> = {
+	CPU: "cpu",
+	Memory: "mem",
+	Disk: "disk",
+	Temperature: "temp",
+	Status: "status",
+	// Bandwidth, GPU, LoadAvg* tidak ada di Pantaw MVP — skip
+}
+
+const metricToAlertKey: Record<string, string> = Object.fromEntries(
+	Object.entries(alertKeyToMetric).map(([k, v]) => [v, k])
+)
+
+type PantawAlert = {
+	id: string
+	system_id: string
+	metric: string
+	threshold: number
+	operator: string
+	duration_s: number
+	enabled: boolean
+	webhook_url: string | null
+	last_fired: number | null
+}
+
+function toAlertRecord(a: PantawAlert): AlertRecord {
+	return {
+		id: a.id,
+		system: a.system_id,
+		name: metricToAlertKey[a.metric] ?? a.metric,
+		triggered: a.last_fired !== null,
+		value: a.threshold,
+		min: Math.round(a.duration_s / 60),
+	}
+}
+
+/** Fetch alerts untuk satu system dan update store */
+async function refreshSystemAlerts(systemId: string) {
+	try {
+		const res = await apiClient.api.v1.alerts.$get({ query: { system_id: systemId } } as Parameters<typeof apiClient.api.v1.alerts.$get>[0])
+		if (!res.ok) return
+		const data = (await res.json()) as PantawAlert[]
+		const map = new Map<string, AlertRecord>()
+		for (const a of data) {
+			const record = toAlertRecord(a)
+			map.set(record.name, record)
+		}
+		$alerts.setKey(systemId, map)
+	} catch (e) {
+		console.error("refreshSystemAlerts", e)
+	}
+}
+
+/** Upsert alert: create jika belum ada, update jika sudah ada */
 const upsertAlerts = debounce(
 	async ({ name, value, min, systems }: { name: string; value: number; min: number; systems: string[] }) => {
+		const metric = alertKeyToMetric[name]
+		if (!metric) return // metric tidak didukung di Pantaw MVP
+
+		const duration_s = min * 60
+		const operator = alertInfo[name as keyof typeof alertInfo]?.invert ? "lt" : "gt"
+
 		try {
-			await pb.send<{ success: boolean }>(endpoint, {
-				method: "POST",
-				// overwrite is always true because we've done filtering client side
-				body: { name, value, min, systems, overwrite: true },
-			})
+			await Promise.all(
+				systems.map(async (systemId) => {
+					// Cek apakah alert sudah ada
+					const existing = $alerts.get()[systemId]?.get(name)
+					if (existing?.id) {
+						// Update existing
+						await apiClient.api.v1.alerts[":id"].$put({
+							param: { id: existing.id },
+							json: { threshold: value, duration_s, enabled: true },
+						})
+					} else {
+						// Create new
+						const res = await apiClient.api.v1.alerts.$post({
+							json: {
+								system_id: systemId,
+								metric: metric as "cpu" | "mem" | "disk" | "temp" | "status",
+								threshold: value,
+								operator: operator as "gt" | "lt" | "eq",
+								duration_s,
+								enabled: true,
+							},
+						})
+						if (res.ok) {
+							const created = (await res.json()) as PantawAlert
+							const record = toAlertRecord(created)
+							const current = $alerts.get()[systemId] ?? new Map()
+							const updated = new Map(current)
+							updated.set(record.name, record)
+							$alerts.setKey(systemId, updated)
+						}
+					}
+					await refreshSystemAlerts(systemId)
+				})
+			)
 		} catch (error) {
 			failedUpdateToast(error)
 		}
@@ -57,13 +146,20 @@ const upsertAlerts = debounce(
 	alertDebounce
 )
 
-/** Delete alerts for a given name and systems */
+/** Delete alerts untuk satu atau banyak system */
 const deleteAlerts = debounce(async ({ name, systems }: { name: string; systems: string[] }) => {
 	try {
-		await pb.send<{ success: boolean }>(endpoint, {
-			method: "DELETE",
-			body: { name, systems },
-		})
+		await Promise.all(
+			systems.map(async (systemId) => {
+				const existing = $alerts.get()[systemId]?.get(name)
+				if (!existing?.id) return
+				await apiClient.api.v1.alerts[":id"].$delete({ param: { id: existing.id } })
+				const current = $alerts.get()[systemId] ?? new Map()
+				const updated = new Map(current)
+				updated.delete(name)
+				$alerts.setKey(systemId, updated)
+			})
+		)
 	} catch (error) {
 		failedUpdateToast(error)
 	}
@@ -74,13 +170,10 @@ export const AlertDialogContent = memo(function AlertDialogContent({ system }: {
 	const systems = useStore($systems)
 	const [overwriteExisting, setOverwriteExisting] = useState<boolean | "indeterminate">(false)
 	const [currentTab, setCurrentTab] = useState("system")
-	// copyKey is used to force remount AlertContent components with
-	// new alert data after copying alerts from another system
 	const [copyKey, setCopyKey] = useState(0)
 
 	const systemAlerts = alerts[system.id] ?? new Map()
 
-	// Systems that have at least one alert configured (excluding the current system)
 	const systemsWithAlerts = useMemo(
 		() => systems.filter((s) => s.id !== system.id && alerts[s.id]?.size),
 		[systems, alerts, system.id]
@@ -91,26 +184,17 @@ export const AlertDialogContent = memo(function AlertDialogContent({ system }: {
 		if (!sourceAlerts?.size) return
 		try {
 			const currentTargetAlerts = $alerts.get()[system.id] ?? new Map()
-			// Alert names present on target but absent from source should be deleted
 			const namesToDelete = Array.from(currentTargetAlerts.keys()).filter((name) => !sourceAlerts.has(name))
+
 			await Promise.all([
 				...Array.from(sourceAlerts.values()).map(({ name, value, min }) =>
-					pb.send<{ success: boolean }>(endpoint, {
-						method: "POST",
-						body: { name, value, min, systems: [system.id], overwrite: true },
-						requestKey: name,
-					})
+					upsertAlerts({ name, value, min, systems: [system.id] })
 				),
 				...namesToDelete.map((name) =>
-					pb.send<{ success: boolean }>(endpoint, {
-						method: "DELETE",
-						body: { name, systems: [system.id] },
-						requestKey: name,
-					})
+					deleteAlerts({ name, systems: [system.id] })
 				),
 			])
-			// Optimistically update the store so components re-mount with correct data
-			// before the realtime subscription event arrives.
+
 			const newSystemAlerts = new Map<string, AlertRecord>()
 			for (const alert of sourceAlerts.values()) {
 				newSystemAlerts.set(alert.name, { ...alert, system: system.id, triggered: false })
@@ -122,9 +206,6 @@ export const AlertDialogContent = memo(function AlertDialogContent({ system }: {
 		}
 	}
 
-	// We need to keep a copy of alerts when we switch to global tab. If we always compare to
-	// current alerts, it will only be updated when first checked, then won't be updated because
-	// after that it exists.
 	const alertsWhenGlobalSelected = useMemo(() => {
 		return currentTab === "global" ? structuredClone(alerts) : alerts
 	}, [currentTab])
@@ -240,6 +321,10 @@ export function AlertContent({
 }) {
 	const { name } = alertData
 
+	// Skip alert types not supported in Pantaw MVP
+	const metric = alertKeyToMetric[alertKey]
+	if (!metric) return null
+
 	const singleDescription = alertData.singleDesc?.()
 
 	const [checked, setChecked] = useState(global ? false : !!alert)
@@ -248,33 +333,17 @@ export function AlertContent({
 
 	const Icon = alertData.icon
 
-	/** Get system ids to update */
 	function getSystemIds(): string[] {
-		// if not global, update only the current system
-		if (!global) {
-			return [system.id]
-		}
-		// if global, update all systems when overwriteExisting is true
-		// update only systems without an existing alert when overwriteExisting is false
+		if (!global) return [system.id]
 		const allSystems = $systems.get()
-		const systemIds: string[] = []
-		for (const system of allSystems) {
-			if (overwriteExisting || !initialAlertsState[system.id]?.has(alertKey)) {
-				systemIds.push(system.id)
-			}
-		}
-		return systemIds
+		return allSystems
+			.filter((s) => overwriteExisting || !initialAlertsState[s.id]?.has(alertKey))
+			.map((s) => s.id)
 	}
 
 	function sendUpsert(min: number, value: number) {
 		const systems = getSystemIds()
-		systems.length &&
-			upsertAlerts({
-				name: alertKey,
-				value,
-				min,
-				systems,
-			})
+		if (systems.length) upsertAlerts({ name: alertKey, value, min, systems })
 	}
 
 	return (
@@ -297,12 +366,9 @@ export function AlertContent({
 					onCheckedChange={(newChecked) => {
 						setChecked(newChecked)
 						if (newChecked) {
-							// if alert checked, create or update alert
 							sendUpsert(min, value)
 						} else {
-							// if unchecked, delete alert (unless global and overwriteExisting is false)
 							deleteAlerts({ name: alertKey, systems: getSystemIds() })
-							// when force deleting all alerts of a type, also remove them from initialAlertsState
 							if (overwriteExisting) {
 								for (const curAlerts of Object.values(initialAlertsState)) {
 									curAlerts.delete(alertKey)
