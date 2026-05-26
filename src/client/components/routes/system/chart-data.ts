@@ -1,4 +1,4 @@
-import { getPbTimestamp, pb } from "@/lib/api"
+import { apiClient, getFromTimestamp } from "@/lib/api"
 import { chartTimeData } from "@/lib/utils"
 import type { ChartData, ChartTimes, ContainerStatsRecord, SystemStatsRecord } from "@/types"
 import { timeTicks } from "d3-time"
@@ -66,22 +66,99 @@ export function appendData<T extends { created: string | number | null }>(
 	return result
 }
 
+/**
+ * Fetch metrics dari Pantaw API dan convert ke format SystemStatsRecord
+ * yang diharapkan oleh Beszel chart components.
+ *
+ * Pantaw menyimpan metrik flat (cpu, mem, disk, dll) sedangkan Beszel
+ * menggunakan nested `stats` object. Kita wrap flat fields ke dalam
+ * `stats` supaya chart hooks tidak perlu diubah.
+ */
 export async function getStats<T extends SystemStatsRecord | ContainerStatsRecord>(
 	collection: string,
 	systemId: string,
 	chartTime: ChartTimes
 ): Promise<T[]> {
+	// Container stats tidak tersedia di Pantaw MVP
+	if (collection !== "system_stats") {
+		return []
+	}
+
 	const cachedStats = cache.get(`${systemId}_${chartTime}_${collection}`) as T[] | undefined
-	const lastCached = cachedStats?.at(-1)?.created as number
-	return await pb.collection(collection).getFullList({
-		filter: pb.collection("").filter("system={:id} && created > {:created} && type={:type}", {
-			id: systemId,
-			created: getPbTimestamp(chartTime, lastCached ? new Date(lastCached + 1000) : undefined),
-			type: chartTimeData[chartTime].type,
-		}),
-		fields: "created,stats",
-		sort: "created",
-	})
+	const lastCached = cachedStats?.at(-1)?.created as number | undefined
+
+	const fromTs = getFromTimestamp(chartTime, lastCached ? new Date(lastCached + 1000) : undefined)
+	const nowTs = Math.floor(Date.now() / 1000)
+
+	// Pilih bucket size berdasarkan chart time range
+	const bucketMap: Record<ChartTimes, number | undefined> = {
+		"1m": undefined, // raw
+		"1h": undefined, // raw
+		"12h": 120, // 2 menit
+		"24h": 300, // 5 menit
+		"1w": 1800, // 30 menit
+		"30d": 7200, // 2 jam
+	}
+	const bucket = bucketMap[chartTime]
+
+	try {
+		const res = await apiClient.api.v1.systems[":id"].metrics.$get({
+			param: { id: systemId },
+			query: {
+				from: String(fromTs),
+				to: String(nowTs),
+				...(bucket ? { bucket: String(bucket) } : {}),
+				limit: "1000",
+			},
+		})
+		if (!res.ok) return cachedStats ?? []
+
+		const json = (await res.json()) as {
+			data: {
+				ts: number
+				cpu?: number
+				mem?: number
+				mem_used?: number
+				mem_total?: number
+				disk?: number
+				disk_read?: number
+				disk_write?: number
+				net_rx?: number
+				net_tx?: number
+				load1?: number
+				load5?: number
+				load15?: number
+				temp?: number
+			}[]
+		}
+
+		// Convert flat Pantaw metrics ke nested Beszel SystemStatsRecord format
+		const records = json.data.map((m) => ({
+			created: m.ts * 1000, // Pantaw: unix sec, Beszel: ms
+			stats: {
+				cpu: m.cpu ?? 0,
+				mp: m.mem ?? 0,
+				mu: m.mem_used != null ? m.mem_used / 1024 / 1024 / 1024 : 0, // bytes -> GB
+				m: m.mem_total != null ? m.mem_total / 1024 / 1024 / 1024 : 0,
+				dp: m.disk ?? 0,
+				dr: m.disk_read != null ? m.disk_read / 1024 / 1024 : 0, // bytes/s -> MB/s
+				dw: m.disk_write != null ? m.disk_write / 1024 / 1024 : 0,
+				ns: m.net_tx != null ? m.net_tx / 1024 / 1024 : 0, // bytes/s -> MB/s
+				nr: m.net_rx != null ? m.net_rx / 1024 / 1024 : 0,
+				la: m.load1 != null ? [m.load1, m.load5 ?? 0, m.load15 ?? 0] as [number, number, number] : undefined,
+				dt: m.temp,
+			},
+			system: systemId,
+		} as unknown as T))
+
+		// Merge dengan cache (append baru, hindari duplikat)
+		const merged = cachedStats ? appendData(cachedStats, records, chartTimeData[chartTime].expectedInterval) : records
+		cache.set(`${systemId}_${chartTime}_${collection}`, merged as SystemStatsRecord[])
+		return merged as T[]
+	} catch (e) {
+		console.error("getStats", e)
+		return cachedStats ?? []
+	}
 }
 
 export function makeContainerData(containers: ContainerStatsRecord[]): ChartData["containerData"] {

@@ -1,4 +1,6 @@
-import { isReadOnlyUser, pb } from "@/lib/api"
+import { isReadOnlyUser, pb, apiClient } from "@/lib/api"
+import { $allSystemsById } from "@/lib/stores"
+import * as systemsManager from "@/lib/systemsManager"
 import { BatteryState, ConnectionType, MeterState, SystemStatus, connectionTypeLabels } from "@/lib/enums"
 import { batteryStateTranslations } from "@/lib/i18n"
 import { $longestSystemNameLen, $userSettings } from "@/lib/stores"
@@ -621,9 +623,7 @@ export const ActionsButton = memo(({ system }: { system: SystemRecord }) => {
 						<DropdownMenuItem
 							className={cn(isReadOnlyUser() && "hidden")}
 							onClick={() => {
-								pb.collection("systems").update(id, {
-									status: status === SystemStatus.Paused ? SystemStatus.Pending : SystemStatus.Paused,
-								})
+								// Pantaw tidak punya pause/resume
 							}}
 						>
 							{status === SystemStatus.Paused ? (
@@ -677,7 +677,17 @@ export const ActionsButton = memo(({ system }: { system: SystemRecord }) => {
 							</AlertDialogCancel>
 							<AlertDialogAction
 								className={cn(buttonVariants({ variant: "destructive" }))}
-								onClick={() => pb.collection("systems").delete(id)}
+								onClick={async () => {
+								try {
+									const res = await apiClient.api.v1.systems[":id"].$delete({ param: { id } })
+									if (res.ok) {
+										const sys = $allSystemsById.get()[id]
+										if (sys) systemsManager.remove(sys)
+									}
+								} catch (e) {
+									console.error("delete system", e)
+								}
+							}}
 							>
 								<Trans>Continue</Trans>
 							</AlertDialogAction>

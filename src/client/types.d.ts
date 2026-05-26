@@ -165,7 +165,7 @@ interface ContainerStats {
 export interface SystemStatsRecord extends BaseRecord {
 	system: string
 	stats: SystemStats
-	created: string | number
+	created: string | number | null
 }
 
 export interface AlertRecord extends BaseRecord {

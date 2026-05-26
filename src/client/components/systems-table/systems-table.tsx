@@ -1,3 +1,4 @@
+import React from "react"
 import { Button } from "@/components/ui/button"
 import {
 	DropdownMenu,
@@ -500,21 +501,21 @@ const SystemCard = memo(
 								// @ts-expect-error
 								const { Icon, name } = column.columnDef as ColumnDef<SystemRecord, unknown>
 								return (
-									<>
-										<div key={`${column.id}-icon`} className="flex items-center">
+									<React.Fragment key={column.id}>
+										<div className="flex items-center">
 											{column.id === "lastSeen" ? (
 												<EyeIcon className="size-4 text-muted-foreground" />
 											) : (
 												Icon && <Icon className="size-4 text-muted-foreground" />
 											)}
 										</div>
-										<div key={`${column.id}-label`} className="flex items-center text-muted-foreground pr-3">
+										<div className="flex items-center text-muted-foreground pr-3">
 											{name()}:
 										</div>
-										<div key={`${column.id}-value`} className="flex items-center">
+										<div className="flex items-center">
 											{flexRender(cell.column.columnDef.cell, cell.getContext())}
 										</div>
-									</>
+									</React.Fragment>
 								)
 							})}
 						</div>
