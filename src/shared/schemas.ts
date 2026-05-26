@@ -48,3 +48,13 @@ export type MetricsPayload = v.InferOutput<typeof MetricsPayloadSchema>
 export const IngestBodySchema = v.union([MetricsPayloadSchema, v.array(MetricsPayloadSchema)])
 
 export type IngestBody = v.InferOutput<typeof IngestBodySchema>
+
+/**
+ * Login request body.
+ */
+export const LoginBodySchema = v.object({
+	email: v.pipe(v.string(), v.email(), v.maxLength(255)),
+	password: v.pipe(v.string(), v.minLength(1), v.maxLength(1024)),
+})
+
+export type LoginBody = v.InferOutput<typeof LoginBodySchema>

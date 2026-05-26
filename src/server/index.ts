@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import auth from "./routes/auth"
 import ingest from "./routes/ingest"
 
 export type Env = {
@@ -49,6 +50,7 @@ app.get("/api/health", async (c) => {
 app.get("/api/v1/health", (c) => c.redirect("/api/health", 301))
 
 app.route("/api/v1/ingest", ingest)
+app.route("/api/v1/auth", auth)
 
 export type AppType = typeof app
 

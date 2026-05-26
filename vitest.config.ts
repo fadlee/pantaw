@@ -12,6 +12,8 @@ export default defineWorkersConfig(async () => {
 					miniflare: {
 						bindings: {
 							MIGRATIONS: migrations,
+							JWT_SECRET_V1: "test-secret-v1-very-long-random-value-for-tests",
+							JWT_KID_CURRENT: "v1",
 						},
 					},
 				},
