@@ -238,13 +238,23 @@ CREATE TABLE agent_tokens (
 
 **Strategi retensi data:** Metrik dihapus secara otomatis oleh cron trigger berdasarkan konfigurasi `RETENTION_DAYS` (default: 30 hari).
 
-### 4.4 KV Namespaces
+### 4.4 KV Namespaces & Bindings
 
 | Namespace | Key | Value | TTL |
 |---|---|---|---|
 | `SESSION_KV` | `session:{user_id}:{jti}` | JSON user info | 30 hari |
-| `RATE_KV` | `rate:{ip}:{endpoint}` | Counter JSON | 60 detik |
-| `CACHE_KV` | `metrics:{system_id}:latest` | JSON metrik terakhir | 35 detik |
+| `RATE_KV` | `login:{email}` | Counter JSON | 15 menit |
+| `CACHE_KV` | `metrics:{system_id}:latest` | JSON metrik terakhir | 90 detik |
+
+`RATE_KV` sekarang hanya dipakai untuk login throttling (volume rendah, muat di kuota KV writes). Rate limiting `/ingest` tidak pakai KV karena volume tinggi (28.800/hari) akan melampaui 1000 KV writes/hari free tier.
+
+**Workers Rate Limiting binding** (di luar KV):
+
+| Binding | Limit | Period | Key |
+|---|---|---|---|
+| `INGEST_LIMITER` | 3 request | 60 detik | `tokenHash` (per-token, bukan per-IP) |
+
+Binding ini native Cloudflare, free tier dengan limit operasi yang generous, tidak makan kuota KV. Kunci per-token mencegah bypass via IP rotation dan tidak salah-blokir banyak agent di belakang NAT yang sama.
 
 Cache KV untuk metrik terakhir penting: setiap kali dashboard di-poll, Workers membaca dari KV (sub-ms) bukan dari D1, menghemat rows read secara signifikan.
 
@@ -257,7 +267,30 @@ Cache KV untuk metrik terakhir penting: setiap kali dashboard di-poll, Workers m
 
 Semua kebutuhan periodic dikonsolidasi ke satu cron `*/2 * * * *` agar invocation Workers cron tetap minimal (~720/hari) dan logic state-transition alert tidak race dengan status sync.
 
-### 4.6 Dashboard SPA (Cloudflare Pages)
+### 4.6 Schema Migrations
+
+Schema D1 dikelola via **Wrangler migrations** (`wrangler d1 migrations`). Struktur direktori:
+
+```
+migrations/
+  0001_initial.sql           # CREATE semua tabel awal
+  0002_<deskripsi>.sql       # ALTER atau CREATE tambahan
+  ...
+```
+
+Apply lokal (untuk development): `wrangler d1 migrations apply pantaw --local`  
+Apply production: `wrangler d1 migrations apply pantaw --remote`
+
+Wrangler maintain tabel `d1_migrations` otomatis untuk track migration yang sudah applied. File migrasi diberi nama dengan prefix nomor urut dan dijalankan sekali (idempotent at the migration level).
+
+**Catatan keterbatasan SQLite/D1 untuk DDL:**
+
+- `ALTER TABLE ADD COLUMN` didukung
+- `ALTER TABLE DROP COLUMN` didukung di SQLite ≥3.35 (D1 sudah support)
+- Perubahan kompleks (rename column dengan constraint baru, ubah tipe kolom) butuh pattern: create new table → copy data → drop old → rename. Migrasi forward-only, tidak ada rollback otomatis
+- **Backup sebelum migrasi destructive:** `wrangler d1 export pantaw --output backup.sql`
+
+### 4.7 Dashboard SPA (Cloudflare Pages)
 
 Frontend dibangun dengan **React + Vite**, di-deploy ke Cloudflare Pages. Static assets gratis dan unlimited.
 
@@ -283,11 +316,24 @@ Pantaw membutuhkan agent yang berjalan di tiap server target untuk mengumpulkan 
 Loop setiap INTERVAL detik (default 30):
   1. Kumpulkan metrik (CPU, mem, disk, net, load, temp)
   2. Optional: kumpulkan container stats (Docker)
-  3. Serialize ke JSON
+  3. Serialize ke JSON (lihat section 6)
   4. HTTPS POST ke {HUB_URL}/api/v1/ingest
      Header: Authorization: Bearer {AGENT_TOKEN}
-  5. Jika response bukan 2xx, log error dan retry di interval berikutnya
+  5. Tangani response sesuai status code (lihat di bawah)
 ```
+
+**Status code handling:**
+
+| Status | Tindakan agent |
+|---|---|
+| 2xx | Sukses, lanjut interval berikutnya |
+| 4xx (kecuali 429) | Log error, drop sample. Kemungkinan token invalid, payload malformed, atau clock skew. Tidak retry. |
+| 429 | Honor `Retry-After` header. Tidak eskalasi ke alert. |
+| 5xx atau network error | Retry dengan exponential backoff: 5s, 15s, 60s, 5m. Setelah 5m, drop sample dan kembali ke loop normal. |
+
+**Catatan kesederhanaan:** MVP tidak menggunakan persistent buffer/ring buffer. Saat hub down lebih dari 5 menit, sample selama outage hilang. Karena `metrics.PRIMARY KEY (system_id, ts)` menjamin idempotensi, durable buffering bisa ditambahkan post-MVP tanpa perubahan server-side.
+
+**Clock skew:** Server menolak payload dengan `ts` di luar jendela `[now - 5min, now + 1min]` (HTTP 400). Agent harus sinkronisasi clock via NTP sebelum start.
 
 **Konfigurasi agent:**
 
@@ -303,7 +349,7 @@ INTERVAL=30             # detik
 
 ## 6. Payload Ingestion
 
-Agent mengirim metrik dalam format JSON berikut setiap interval:
+Agent mengirim metrik dalam format JSON berikut setiap interval. Endpoint accept **single object** (default) atau **array of objects** (untuk batching post-MVP):
 
 ```json
 {
@@ -331,6 +377,12 @@ Agent mengirim metrik dalam format JSON berikut setiap interval:
   ]
 }
 ```
+
+**Validasi server-side:**
+
+- `ts` harus dalam jendela `[now - 5min, now + 1min]` (mencegah clock skew + replay)
+- Tipe data sesuai schema `metrics`
+- Ukuran payload ≤ 64KB (cukup untuk ≈1000 container)
 
 Workers memvalidasi payload ini, mengekstrak `system_id` dari token, lalu menulis 1 row ke `metrics` (D1) dan menyegarkan `CACHE_KV: metrics:{system_id}:latest`. Tidak ada state lain yang diupdate per-ingest; status agent dihitung secara dinamis dari `MAX(metrics.ts)` (lihat 4.2).
 
@@ -384,7 +436,7 @@ Mitigasi jika mendekati batas D1 writes:
 
 - API key di-generate saat penambahan system di dashboard
 - Key mentah hanya ditampilkan sekali, di-hash SHA-256 sebelum disimpan di D1
-- Rate limiting via KV: maksimal 10 request/menit per IP untuk endpoint `/ingest`
+- Rate limiting via **Workers Rate Limiting binding** `INGEST_LIMITER`: maksimal 3 request/menit per token. Per-token (bukan per-IP) untuk menghindari false positive saat banyak agent berada di NAT yang sama, dan mencegah bypass via IP rotation. Threshold 3/min memberi ruang 1 retry di luar rate normal 2/min (interval 30s)
 
 ### 8.3 Autentikasi User
 
@@ -396,7 +448,11 @@ Mitigasi jika mendekati batas D1 writes:
   - Pilihan ini menggantikan bcrypt karena bcrypt cost ≥10 melebihi CPU limit 10ms Workers free tier; PBKDF2 native via WebCrypto tetap muat dalam budget
   - Saat verify sukses, jika iteration count tersimpan < `ITERATIONS` saat ini, hash di-rehash otomatis (transparent upgrade)
 - Login throttling: maksimal 5 attempts per 15 menit per email (bukan per IP, karena IP mudah dirotasi). Disimpan di `RATE_KV`
-- JWT menggunakan RS256 (private key disimpan di Workers Secret)
+- JWT menggunakan **HS256** dengan secret di Workers Secret. Asymmetric (RS256) tidak diperlukan karena hub adalah satu-satunya signer dan verifier; HS256 lebih simple, lebih cepat, dan key management trivial
+- JWT include claim `kid` (key ID) untuk mendukung rotation:
+  - Secret disimpan dengan versi: `JWT_SECRET_V1`, `JWT_SECRET_V2`, dst
+  - Signer pakai latest version, verifier resolve secret berdasarkan `kid` di header JWT
+  - Rotation flow: deploy `JWT_SECRET_V2` → signer switch → verifier accept v1 dan v2 selama window TTL JWT (24 jam) → hapus v1
 - JWT expire 24 jam; refresh token 30 hari disimpan di KV
 
 ### 8.4 Isolasi Data
@@ -414,9 +470,11 @@ Mitigasi jika mendekati batas D1 writes:
 | Workers CPU limit 10ms (free) | Logic kompleks bisa timeout | Minimalkan komputasi per-request; cron trigger punya 30s wall time |
 | Tidak ada WebSocket push di MVP | Dashboard tidak real-time | Polling dari dashboard setiap 30 detik |
 | D1 storage 5GB (free, total per akun) | Historis metrik terbatas | Retention policy + data aggregation harian (lihat section 7) |
-| Status agent dihitung tiap query | Sedikit overhead di cron + dashboard | Index `(system_id, ts DESC)` membuat `MAX(ts)` cepat |
-| Tidak ada SSH tunnel | Perlu modifikasi agent | Opsi A backward-compatible |
+| Status agent dihitung tiap query | Sedikit overhead di cron + dashboard | PK `(system_id, ts)` membuat `MAX(ts)` cepat |
+| Wire protocol berbeda dari Beszel | Beszel agent tidak compatible | Pantaw agent ditulis sebagai binary terpisah (lihat section 5) |
 | Tidak ada real-time push (DO didrop) | Status delay maksimal 2 menit (cron interval) | Acceptable untuk monitoring; tambah DO + WebSocket di fase berikutnya jika perlu |
+| Agent tidak punya persistent buffer | Sample selama outage hub >5min hilang | Idempotensi via PK siap; durable buffer bisa ditambahkan post-MVP tanpa server change |
+| D1 migrations forward-only | Tidak ada rollback otomatis | Test migrasi di local D1 dulu; backup via `wrangler d1 export` sebelum apply destructive |
 
 ---
 
@@ -425,18 +483,20 @@ Mitigasi jika mendekati batas D1 writes:
 ### Fase 1 — Foundation (Minggu 1–2)
 
 - [ ] Inisialisasi project Cloudflare Workers dengan Wrangler
-- [ ] Setup D1 database, migrate schema (`metrics` pakai composite PK `(system_id, ts)` + `WITHOUT ROWID`)
-- [ ] Implementasi endpoint `/api/v1/ingest` dengan autentikasi API key
-- [ ] Implementasi `CACHE_KV` write-through pada path ingest
-- [ ] Unit test untuk auth dan ingestion logic (termasuk skenario retry/duplikat)
+- [ ] Setup struktur `migrations/` dengan `0001_initial.sql` (semua tabel)
+- [ ] Setup D1 database (lokal + remote), apply migration awal (`metrics` pakai composite PK `(system_id, ts)` + `WITHOUT ROWID`)
+- [ ] Konfigurasi `INGEST_LIMITER` (Workers Rate Limiting binding) di `wrangler.toml`
+- [ ] Implementasi endpoint `/api/v1/ingest`: validasi token, validasi `ts` window (clock skew), `INSERT OR IGNORE`, write-through `CACHE_KV`
+- [ ] Unit test: auth (token valid/invalid/expired), ingest (single/array payload, duplicate retry, clock skew rejection, rate limit)
 
 ### Fase 2 — API Lengkap (Minggu 3–4)
 
 - [ ] Endpoint CRUD systems dan users
-- [ ] Implementasi JWT auth (login, refresh, verify)
+- [ ] Implementasi JWT auth (HS256 dengan `kid` claim, login, refresh, verify)
+- [ ] Login throttling via `RATE_KV` (5 attempts / 15 menit per email)
 - [ ] Endpoint metrik historis dengan query time range
-- [ ] KV caching untuk latest metrics
-- [ ] Alert table dan cron trigger alert checker
+- [ ] KV caching untuk latest metrics (read path dashboard)
+- [ ] Alert table dan cron trigger alert+status checker
 
 ### Fase 3 — Dashboard (Minggu 5–7)
 
@@ -450,6 +510,8 @@ Mitigasi jika mendekati batas D1 writes:
 ### Fase 4 — Agent & Polish (Minggu 8–9)
 
 - [ ] Implementasi Pantaw agent (Go binary): collector + HTTPS POST loop
+- [ ] Status code handling + exponential backoff (5s→15s→60s→5m, lalu drop)
+- [ ] Validasi NTP saat startup
 - [ ] End-to-end testing: agent → Workers → D1 → Dashboard
 - [ ] Load testing kalkulasi free tier
 - [ ] Dokumentasi setup (README, env vars)
