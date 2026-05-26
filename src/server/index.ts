@@ -15,6 +15,8 @@ export type Env = {
 	JWT_KID_CURRENT: string
 	RETENTION_DAYS: string
 	TIMEOUT_SECONDS: string
+	/** Workers Static Assets binding — serve SPA bundle */
+	ASSETS?: Fetcher
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -55,6 +57,20 @@ const routes = app
 	.route("/api/v1/auth", auth)
 	.route("/api/v1/systems", systems)
 	.route("/api/v1/alerts", alerts)
+	// Catch-all: serve SPA untuk non-API routes (SPA behaviour saat refresh)
+	// API routes yang tidak ada tetap return 404 JSON.
+	.get("*", async (c) => {
+		if (c.req.path.startsWith("/api/")) {
+			return c.json({ error: "not_found" }, 404)
+		}
+		// ASSETS binding serve static files; jika tidak ada file,
+		// not_found_handling = 'single-page-application' di wrangler.toml
+		// otomatis serve index.html
+		if (c.env.ASSETS) {
+			return c.env.ASSETS.fetch(c.req.raw)
+		}
+		return c.json({ error: "not_found" }, 404)
+	})
 
 export type AppType = typeof routes
 
