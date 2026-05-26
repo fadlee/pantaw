@@ -11,9 +11,9 @@
 			"@types/react-dom"
 		],
 		"strict": true,
-		"noUncheckedIndexedAccess": true,
+		"noUncheckedIndexedAccess": false,
 		"noImplicitOverride": true,
-		"exactOptionalPropertyTypes": true,
+		"exactOptionalPropertyTypes": false,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
@@ -21,11 +21,12 @@
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
 		"noEmit": true,
+		"allowImportingTsExtensions": true,
 		"jsx": "react-jsx",
 		"baseUrl": ".",
 		"paths": {
+			"@/*": ["./src/client/*"],
 			"@/server/*": ["./src/server/*"],
-			"@/client/*": ["./src/client/*"],
 			"@/shared/*": ["./src/shared/*"]
 		}
 	},

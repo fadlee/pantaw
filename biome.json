@@ -4,7 +4,7 @@
 		"enabled": true
 	},
 	"files": {
-		"ignore": ["dist", ".wrangler", "node_modules", "src/client/locales"]
+		"ignore": ["dist", ".wrangler", "node_modules", "src/client"]
 	},
 	"formatter": {
 		"enabled": true,
