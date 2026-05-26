@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { LogOut } from "lucide-react"
 import { Button } from "../components/ui"
 import { api } from "../lib/api"
+import { SystemsList } from "./systems/SystemsList"
 
 type Me = { id: string; email: string; role: "admin" | "user" }
 
@@ -31,13 +32,8 @@ export function Dashboard({ user }: { user: Me }) {
 					</Button>
 				</div>
 			</header>
-			<main className="flex flex-1 items-center justify-center p-8">
-				<div className="text-center">
-					<h2 className="font-semibold text-xl text-zinc-100">Dashboard placeholder</h2>
-					<p className="mt-2 text-sm text-zinc-500">
-						Daftar system, metrik time-series, dan alert UI akan dipasang berikutnya.
-					</p>
-				</div>
+			<main className="flex-1 p-6">
+				<SystemsList />
 			</main>
 		</div>
 	)
