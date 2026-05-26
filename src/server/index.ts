@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { runScheduled } from "./cron"
 import alerts from "./routes/alerts"
 import auth from "./routes/auth"
 import ingest from "./routes/ingest"
@@ -60,8 +61,7 @@ export type AppType = typeof app
 
 export default {
 	fetch: app.fetch,
-	async scheduled(_controller: ScheduledController, _env: Env, _ctx: ExecutionContext) {
-		// TODO: alert + status checker (cron */2 * * * *)
-		// TODO: metrics cleanup (cron 0 2 * * *)
+	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+		ctx.waitUntil(runScheduled(controller, env))
 	},
 } satisfies ExportedHandler<Env>
