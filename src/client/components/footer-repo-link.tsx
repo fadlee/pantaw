@@ -18,12 +18,12 @@ export function FooterRepoLink() {
 			</a>
 			<Separator orientation="vertical" className="h-2.5 bg-muted-foreground opacity-70" />
 			<a
-				href="https://github.com/henrygd/beszel/releases"
+				href="https://github.com/fadlee/pantaw"
 				target="_blank"
 				className="text-muted-foreground hover:text-foreground duration-75"
 				rel="noreferrer noopener"
 			>
-				Beszel {globalThis.BESZEL.HUB_VERSION}
+				Pantaw {typeof BESZEL !== "undefined" ? BESZEL?.HUB_VERSION : ""}
 			</a>
 			{newVersion?.v && (
 				<>
