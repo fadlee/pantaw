@@ -2,17 +2,17 @@
  * Password hashing menggunakan PBKDF2-SHA256 via WebCrypto.
  *
  * Lihat RFC section 8.3:
- * - Iterations: 600.000 (rekomendasi OWASP 2023)
  * - Salt: 16 bytes random per password
  * - Output: 32 bytes derived key
  * - PHC string format untuk forward compatibility
  *
- * Pilihan PBKDF2 di atas bcrypt karena bcrypt cost ≥10 melebihi
- * CPU limit 10ms Workers free tier. PBKDF2 native via WebCrypto
- * (BoringSSL) tetap muat dalam budget.
+ * Di praktiknya, 600k iter PBKDF2 terlalu agresif untuk Workers runtime
+ * production dan bisa memicu 500 pada setup/login. Kita pakai nilai yang
+ * lebih konservatif agar auth tetap reliabel di edge, sambil tetap simpan
+ * iteration count di PHC string untuk rotasi/upgrade bertahap nanti.
  */
 
-const ITERATIONS = 600_000
+const ITERATIONS = 100_000
 const HASH_LEN = 32
 const SALT_LEN = 16
 
