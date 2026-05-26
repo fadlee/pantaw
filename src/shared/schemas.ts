@@ -58,3 +58,14 @@ export const LoginBodySchema = v.object({
 })
 
 export type LoginBody = v.InferOutput<typeof LoginBodySchema>
+
+/**
+ * Body untuk membuat system baru.
+ */
+export const CreateSystemBodySchema = v.object({
+	name: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
+	host: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
+	timeout_seconds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(30), v.maxValue(3600))),
+})
+
+export type CreateSystemBody = v.InferOutput<typeof CreateSystemBodySchema>

@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import auth from "./routes/auth"
 import ingest from "./routes/ingest"
+import systems from "./routes/systems"
 
 export type Env = {
 	DB: D1Database
@@ -51,6 +52,7 @@ app.get("/api/v1/health", (c) => c.redirect("/api/health", 301))
 
 app.route("/api/v1/ingest", ingest)
 app.route("/api/v1/auth", auth)
+app.route("/api/v1/systems", systems)
 
 export type AppType = typeof app
 
