@@ -1,6 +1,6 @@
 import { vValidator } from "@hono/valibot-validator"
 import { Hono } from "hono"
-import { CreateSystemBodySchema } from "../../shared/schemas"
+import { CreateSystemBodySchema, MetricsQuerySchema } from "../../shared/schemas"
 import type { Env } from "../index"
 import { sha256Hex } from "../lib/crypto"
 import type { UserAuthVars } from "../middleware/user-auth"
@@ -165,6 +165,111 @@ app.post("/:id/tokens", requireAdmin, async (c) => {
 		.run()
 
 	return c.json({ id: tokenId, agent_token: rawToken, created_at: now }, 201)
+})
+
+const RAW_METRIC_COLUMNS = [
+	"ts",
+	"cpu",
+	"mem",
+	"mem_used",
+	"mem_total",
+	"disk",
+	"disk_read",
+	"disk_write",
+	"net_rx",
+	"net_tx",
+	"load1",
+	"load5",
+	"load15",
+	"temp",
+] as const
+
+// GET /api/v1/systems/:id/metrics - histori metrik dengan time range
+app.get("/:id/metrics", vValidator("query", MetricsQuerySchema), async (c) => {
+	const id = c.req.param("id")
+	const { from, to, bucket, limit } = c.req.valid("query")
+
+	const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(id).first()
+	if (!exists) return c.json({ error: "not_found" }, 404)
+
+	const nowSec = Math.floor(Date.now() / 1000)
+	const toTs = to ?? nowSec
+	const fromTs = from ?? toTs - 60 * 60 // default 1 jam terakhir
+	if (fromTs >= toTs) {
+		return c.json({ error: "invalid_range", message: "from must be < to" }, 400)
+	}
+	const rowLimit = limit ?? 500
+
+	if (bucket) {
+		// Agregasi: bucket_start = ts - (ts % bucket). Pakai modulo agar dapat
+		// integer arithmetic; CAST(? AS INTEGER) penting karena param numeric JS
+		// di-bind sebagai REAL secara default.
+		const { results } = await c.env.DB.prepare(
+			`SELECT (ts - (ts % CAST(? AS INTEGER))) AS bucket_ts,
+			        AVG(cpu) AS cpu, AVG(mem) AS mem,
+			        AVG(mem_used) AS mem_used, AVG(mem_total) AS mem_total,
+			        AVG(disk) AS disk,
+			        AVG(disk_read) AS disk_read, AVG(disk_write) AS disk_write,
+			        AVG(net_rx) AS net_rx, AVG(net_tx) AS net_tx,
+			        AVG(load1) AS load1, AVG(load5) AS load5, AVG(load15) AS load15,
+			        AVG(temp) AS temp,
+			        COUNT(*) AS samples
+			 FROM metrics
+			 WHERE system_id = ? AND ts >= ? AND ts < ?
+			 GROUP BY bucket_ts
+			 ORDER BY bucket_ts ASC
+			 LIMIT ?`
+		)
+			.bind(bucket, id, fromTs, toTs, rowLimit)
+			.all<Record<string, number>>()
+
+		return c.json({
+			range: { from: fromTs, to: toTs },
+			bucket,
+			count: results.length,
+			data: results.map((r) => ({
+				ts: r.bucket_ts,
+				cpu: r.cpu,
+				mem: r.mem,
+				mem_used: r.mem_used,
+				mem_total: r.mem_total,
+				disk: r.disk,
+				disk_read: r.disk_read,
+				disk_write: r.disk_write,
+				net_rx: r.net_rx,
+				net_tx: r.net_tx,
+				load1: r.load1,
+				load5: r.load5,
+				load15: r.load15,
+				temp: r.temp,
+				samples: r.samples,
+			})),
+		})
+	}
+
+	// Raw rows: scan PK btree (system_id, ts) ASC, pakai LIMIT untuk safeguard.
+	const { results } = await c.env.DB.prepare(
+		`SELECT ${RAW_METRIC_COLUMNS.join(", ")}, extra
+		 FROM metrics
+		 WHERE system_id = ? AND ts >= ? AND ts < ?
+		 ORDER BY ts ASC
+		 LIMIT ?`
+	)
+		.bind(id, fromTs, toTs, rowLimit)
+		.all<Record<string, unknown>>()
+
+	return c.json({
+		range: { from: fromTs, to: toTs },
+		bucket: null,
+		count: results.length,
+		data: results.map((r) => {
+			const extraRaw = typeof r.extra === "string" ? r.extra : null
+			const extra = extraRaw ? (JSON.parse(extraRaw) as unknown) : null
+			const { extra: _drop, ...rest } = r
+			void _drop
+			return { ...rest, extra }
+		}),
+	})
 })
 
 export default app

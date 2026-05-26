@@ -69,3 +69,24 @@ export const CreateSystemBodySchema = v.object({
 })
 
 export type CreateSystemBody = v.InferOutput<typeof CreateSystemBodySchema>
+
+/**
+ * Query parameter untuk GET /api/v1/systems/:id/metrics.
+ *
+ * - `from`, `to`: unix timestamp (detik), default = 1 jam terakhir
+ * - `bucket`: optional, agregasi ke bucket N detik (mis. 60 = per menit).
+ *   Tanpa bucket = raw rows. Dengan bucket = AVG per bucket.
+ * - `limit`: cap jumlah row, default 500, max 5000
+ */
+export const MetricsQuerySchema = v.object({
+	from: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0))),
+	to: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0))),
+	bucket: v.optional(
+		v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(30), v.maxValue(86_400))
+	),
+	limit: v.optional(
+		v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(1), v.maxValue(5000))
+	),
+})
+
+export type MetricsQuery = v.InferOutput<typeof MetricsQuerySchema>
