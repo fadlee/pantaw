@@ -20,7 +20,15 @@
 	},
 	"dependencies": {
 		"@hono/valibot-validator": "^0.5.2",
+		"@nanostores/react": "^0.7",
+		"@tanstack/react-query": "^5",
+		"clsx": "^2",
 		"hono": "^4.6.13",
+		"lucide-react": "^0.452",
+		"nanostores": "^0.11",
+		"react": "^19",
+		"react-dom": "^19",
+		"tailwind-merge": "^3",
 		"valibot": "^1.0.0-beta.9"
 	},
 	"devDependencies": {
@@ -28,6 +36,11 @@
 		"@cloudflare/vite-plugin": "^0.1.16",
 		"@cloudflare/vitest-pool-workers": "^0.8.0",
 		"@cloudflare/workers-types": "^4.20241224.0",
+		"@tailwindcss/vite": "^4",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"@vitejs/plugin-react-swc": "^4",
+		"tailwindcss": "^4",
 		"typescript": "^5.7.2",
 		"vite": "^6.0.5",
 		"vitest": "^2.1.8",

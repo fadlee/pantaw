@@ -4,11 +4,12 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Workers Static Assets (SPA bundle).
-# Akan diaktifkan di Fase 3 saat client React di-build.
-# [assets]
-# directory = "./dist/client"
-# binding = "ASSETS"
-# not_found_handling = "single-page-application"
+# Vite akan output client bundle ke ./dist/client; server bundle
+# di-serve oleh Worker (main di atas).
+[assets]
+directory = "./dist/client"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
 
 # D1 Database
 [[d1_databases]]
