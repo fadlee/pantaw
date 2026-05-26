@@ -60,6 +60,17 @@ export const LoginBodySchema = v.object({
 export type LoginBody = v.InferOutput<typeof LoginBodySchema>
 
 /**
+ * Body untuk first-time setup (register admin pertama).
+ * Endpoint hanya bisa dipakai saat tabel users masih kosong.
+ */
+export const SetupBodySchema = v.object({
+	email: v.pipe(v.string(), v.email(), v.maxLength(255)),
+	password: v.pipe(v.string(), v.minLength(8), v.maxLength(1024)),
+})
+
+export type SetupBody = v.InferOutput<typeof SetupBodySchema>
+
+/**
  * Body untuk membuat system baru.
  */
 export const CreateSystemBodySchema = v.object({

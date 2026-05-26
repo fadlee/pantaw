@@ -1,13 +1,13 @@
 import { vValidator } from "@hono/valibot-validator"
+import type { Context } from "hono"
 import { Hono } from "hono"
 import { deleteCookie, setCookie } from "hono/cookie"
-import { LoginBodySchema } from "../../shared/schemas"
+import { LoginBodySchema, SetupBodySchema } from "../../shared/schemas"
 import type { Env } from "../index"
 import { defaultKidResolver, signJwt } from "../lib/jwt"
 import { hashPassword, verifyPassword } from "../lib/password"
 import type { UserAuthVars } from "../middleware/user-auth"
 import { SESSION_COOKIE, userAuth } from "../middleware/user-auth"
-
 const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 
 const SESSION_TTL_SEC = 24 * 60 * 60 // 24 jam
@@ -85,6 +85,64 @@ type UserRow = {
 	role: "admin" | "user"
 }
 
+async function userCount(env: Env): Promise<number> {
+	const row = await env.DB.prepare("SELECT COUNT(*) as n FROM users").first<{ n: number }>()
+	return row?.n ?? 0
+}
+
+function setSessionCookie(c: Context<{ Bindings: Env; Variables: UserAuthVars }>, token: string) {
+	setCookie(c, SESSION_COOKIE, token, {
+		httpOnly: true,
+		secure: true,
+		sameSite: "Strict",
+		path: "/",
+		maxAge: SESSION_TTL_SEC,
+	})
+}
+
+// GET /api/v1/auth/setup-status
+// Public endpoint untuk cek apakah hub butuh first-time setup.
+// Client menampilkan form register admin saat needs_setup=true.
+app.get("/setup-status", async (c) => {
+	const n = await userCount(c.env)
+	return c.json({ needs_setup: n === 0 })
+})
+
+// POST /api/v1/auth/setup
+// First-time setup: register admin pertama. Atomic via INSERT ... WHERE
+// NOT EXISTS untuk mencegah race condition antar request konkuren.
+app.post("/setup", vValidator("json", SetupBodySchema), async (c) => {
+	const { email, password } = c.req.valid("json")
+	const normalizedEmail = email.trim().toLowerCase()
+	const id = crypto.randomUUID()
+	const hash = await hashPassword(password)
+	const now = Math.floor(Date.now() / 1000)
+
+	const result = await c.env.DB.prepare(
+		`INSERT INTO users (id, email, password_hash, role, created_at, system_ids)
+		 SELECT ?, ?, ?, 'admin', ?, '[]'
+		 WHERE NOT EXISTS (SELECT 1 FROM users)`
+	)
+		.bind(id, normalizedEmail, hash, now)
+		.run()
+
+	if (result.meta.changes === 0) {
+		return c.json({ error: "already_setup" }, 409)
+	}
+
+	const token = await signJwt(
+		{ sub: id, email: normalizedEmail, role: "admin" },
+		{
+			currentKid: c.env.JWT_KID_CURRENT,
+			resolveSecret: defaultKidResolver(c.env as unknown as Record<string, unknown>),
+			expiresInSec: SESSION_TTL_SEC,
+		}
+	)
+	setSessionCookie(c, token)
+
+	return c.json({ id, email: normalizedEmail, role: "admin" as const }, 201)
+})
+
 app.post("/login", vValidator("json", LoginBodySchema), async (c) => {
 	const { email, password } = c.req.valid("json")
 	const normalizedEmail = email.trim().toLowerCase()
@@ -129,13 +187,7 @@ app.post("/login", vValidator("json", LoginBodySchema), async (c) => {
 		}
 	)
 
-	setCookie(c, SESSION_COOKIE, token, {
-		httpOnly: true,
-		secure: true,
-		sameSite: "Strict",
-		path: "/",
-		maxAge: SESSION_TTL_SEC,
-	})
+	setSessionCookie(c, token)
 
 	return c.json({ id: user.id, email: user.email, role: user.role })
 })
