@@ -15,6 +15,7 @@ import { Trans } from "@lingui/react/macro"
 import { getPagePath } from "@nanostores/router"
 import { LogOutIcon, MenuIcon, PlusIcon, SearchIcon, ServerIcon, SettingsIcon, UserIcon } from "lucide-react"
 import { Suspense, lazy, useState } from "react"
+import { AddSystemDialog } from "./add-system"
 import { LangToggle } from "./lang-toggle"
 import { Logo } from "./logo"
 import { ModeToggle } from "./mode-toggle"
@@ -26,6 +27,7 @@ const CommandPalette = lazy(() => import("./command-palette"))
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0
 
 export default function Navbar() {
+	const [addSystemDialogOpen, setAddSystemDialogOpen] = useState(false)
 	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
 	const systemTranslation = t`System`
@@ -35,6 +37,7 @@ export default function Navbar() {
 			<Suspense>
 				<CommandPalette open={commandPaletteOpen} setOpen={setCommandPaletteOpen} />
 			</Suspense>
+			<AddSystemDialog open={addSystemDialogOpen} setOpen={setAddSystemDialogOpen} />
 
 			<Link
 				href={basePath}
@@ -87,7 +90,7 @@ export default function Navbar() {
 							{!isReadOnlyUser() && (
 								<DropdownMenuItem
 									className="flex items-center"
-									onSelect={() => navigate(getPagePath($router, "settings", { name: "general" }))}
+									onSelect={() => setAddSystemDialogOpen(true)}
 								>
 									<PlusIcon className="h-4 w-4 me-2.5" />
 									<Trans>Add {{ foo: systemTranslation }}</Trans>
@@ -159,6 +162,13 @@ export default function Navbar() {
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
+			{/* desktop: add system button */}
+				{!isReadOnlyUser() && (
+					<Button variant="outline" className="flex gap-1 ms-2" onClick={() => setAddSystemDialogOpen(true)}>
+						<PlusIcon className="h-4 w-4 -ms-1" />
+						<Trans>Add {{ foo: systemTranslation }}</Trans>
+					</Button>
+				)}
 			</div>
 		</div>
 	)

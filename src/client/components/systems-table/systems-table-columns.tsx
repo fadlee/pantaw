@@ -111,7 +111,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 				// match filter value against name or translated status
 				return (row, _, newFilterInput) => {
 					const sys = row.original
-					if (sys.host.includes(newFilterInput) || sys.info.v?.includes(newFilterInput)) {
+					if (sys.host.includes(newFilterInput) || sys.info?.v?.includes(newFilterInput)) {
 						return true
 					}
 					if (newFilterInput !== filterInput) {
@@ -167,7 +167,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			header: sortableHeader,
 		},
 		{
-			accessorFn: ({ info }) => info.cpu || undefined,
+			accessorFn: ({ info }) => info?.cpu || undefined,
 			id: "cpu",
 			name: () => t`CPU`,
 			cell: TableCellWithMeter,
@@ -176,7 +176,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 		},
 		{
 			// accessorKey: "info.mp",
-			accessorFn: ({ info }) => info.mp || undefined,
+			accessorFn: ({ info }) => info?.mp || undefined,
 			id: "memory",
 			name: () => t`Memory`,
 			cell: TableCellWithMeter,
@@ -184,16 +184,16 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			header: sortableHeader,
 		},
 		{
-			accessorFn: ({ info }) => info.dp || undefined,
+			accessorFn: ({ info }) => info?.dp || undefined,
 			id: "disk",
 			name: () => t`Disk`,
 			cell: (info: CellContext<SystemRecord, unknown>) =>
-				info.row.original.info.efs ? DiskCellWithMultiple(info) : TableCellWithMeter(info),
+				info.row.original.info?.efs ? DiskCellWithMultiple(info) : TableCellWithMeter(info),
 			Icon: HardDriveIcon,
 			header: sortableHeader,
 		},
 		{
-			accessorFn: ({ info }) => info.g || undefined,
+			accessorFn: ({ info }) => info?.g || undefined,
 			id: "gpu",
 			name: () => "GPU",
 			cell: TableCellWithMeter,
@@ -202,23 +202,23 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 		},
 		{
 			id: "loadAverage",
-			accessorFn: ({ info }) => info.la?.reduce((acc, curr) => acc + curr, 0),
+			accessorFn: ({ info }) => info?.la?.reduce((acc, curr) => acc + curr, 0),
 			name: () => t({ message: "Load Avg", comment: "Short label for load average" }),
 			size: 0,
 			Icon: HourglassIcon,
 			header: sortableHeader,
 			cell(info: CellContext<SystemRecord, unknown>) {
 				const { info: sysInfo, status } = info.row.original
-				const { major, minor } = parseSemVer(sysInfo.v)
+				const { major, minor } = parseSemVer(sysInfo?.v)
 				const { colorWarn = 65, colorCrit = 90 } = useStore($userSettings, { keys: ["colorWarn", "colorCrit"] })
-				const loadAverages = sysInfo.la || []
+				const loadAverages = sysInfo?.la || []
 
 				const max = Math.max(...loadAverages)
 				if (max === 0 && (status === SystemStatus.Paused || (major < 1 && minor < 13))) {
 					return null
 				}
 
-				const normalizedLoad = max / (sysInfo.t ?? 1)
+				const normalizedLoad = max / (sysInfo?.t ?? 1)
 				const threshold = getMeterStateByThresholds(normalizedLoad * 100, colorWarn, colorCrit)
 
 				return (
@@ -239,7 +239,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 		},
 		{
-			accessorFn: ({ info, status }) => (status !== SystemStatus.Up ? undefined : info.bb),
+			accessorFn: ({ info, status }) => (status !== SystemStatus.Up ? undefined : info?.bb),
 			id: "net",
 			name: () => t`Net`,
 			size: 0,
@@ -261,7 +261,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 		},
 		{
-			accessorFn: ({ info }) => info.dt,
+			accessorFn: ({ info }) => info?.dt,
 			id: "temp",
 			name: () => t({ message: "Temp", comment: "Temperature label in systems table" }),
 			size: 50,
@@ -283,7 +283,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 		},
 		{
-			accessorFn: ({ info }) => info.bat?.[0],
+			accessorFn: ({ info }) => info?.bat?.[0],
 			id: "battery",
 			name: () => t({ message: "Bat", comment: "Battery label in systems table header" }),
 			size: 70,
@@ -291,7 +291,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			header: sortableHeader,
 			hideSort: true,
 			cell(info) {
-				const [pct, state] = info.row.original.info.bat ?? []
+				const [pct, state] = info.row.original.info?.bat ?? []
 				if (pct === undefined) {
 					return null
 				}
@@ -329,7 +329,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 		},
 		{
-			accessorFn: ({ info }) => info.sv?.[0],
+			accessorFn: ({ info }) => info?.sv?.[0],
 			id: "services",
 			name: () => t`Services`,
 			size: 50,
@@ -338,8 +338,8 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			hideSort: true,
 			sortingFn: (a, b) => {
 				// sort priorities: 1) failed services, 2) total services
-				const [totalCountA, numFailedA] = a.original.info.sv ?? [0, 0]
-				const [totalCountB, numFailedB] = b.original.info.sv ?? [0, 0]
+				const [totalCountA, numFailedA] = a.original.info?.sv ?? [0, 0]
+				const [totalCountB, numFailedB] = b.original.info?.sv ?? [0, 0]
 				if (numFailedA !== numFailedB) {
 					return numFailedA - numFailedB
 				}
@@ -347,7 +347,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 			cell(info) {
 				const sys = info.row.original
-				const [totalCount, numFailed] = sys.info.sv ?? [0, 0]
+				const [totalCount, numFailed] = sys.info?.sv ?? [0, 0]
 				if (sys.status !== SystemStatus.Up || totalCount === 0) {
 					return null
 				}
@@ -368,7 +368,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 		},
 		{
-			accessorFn: ({ info }) => info.u || undefined,
+			accessorFn: ({ info }) => info?.u || undefined,
 			id: "uptime",
 			name: () => t`Uptime`,
 			size: 50,
@@ -384,7 +384,7 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 			},
 		},
 		{
-			accessorFn: ({ info }) => info.v,
+			accessorFn: ({ info }) => info?.v,
 			id: "agent",
 			name: () => t`Agent`,
 			size: 50,
@@ -410,15 +410,15 @@ export function SystemsTableColumns(viewMode: "table" | "grid"): ColumnDef<Syste
 							viewMode === "table" && "ps-0.5"
 						)}
 						tabIndex={-1}
-						title={connectionTypeLabels[system.info.ct as ConnectionType]}
+						title={connectionTypeLabels[system.info?.ct as ConnectionType]}
 					>
-						{system.info.ct === ConnectionType.WebSocket && (
+						{system.info?.ct === ConnectionType.WebSocket && (
 							<WebSocketIcon className={cn("size-3 pointer-events-none", color)} />
 						)}
-						{system.info.ct === ConnectionType.SSH && (
+						{system.info?.ct === ConnectionType.SSH && (
 							<ChevronRightSquareIcon className={cn("size-3 pointer-events-none", color)} />
 						)}
-						{!system.info.ct && <IndicatorDot system={system} className={cn(color, "bg-current mx-0.5")} />}
+						{!system.info?.ct && <IndicatorDot system={system} className={cn(color, "bg-current mx-0.5")} />}
 						<span className="truncate max-w-14">{info.getValue() as string}</span>
 					</Link>
 				)
@@ -485,8 +485,8 @@ function TableCellWithMeter(info: CellContext<SystemRecord, unknown>) {
 function DiskCellWithMultiple(info: CellContext<SystemRecord, unknown>) {
 	const { colorWarn = 65, colorCrit = 90 } = useStore($userSettings, { keys: ["colorWarn", "colorCrit"] })
 	const { info: sysInfo, status, id } = info.row.original
-	const extraFs = Object.entries(sysInfo.efs ?? {})
-	const rootDiskPct = sysInfo.dp
+	const extraFs = Object.entries(sysInfo?.efs ?? {})
+	const rootDiskPct = sysInfo?.dp
 
 	// sort extra disks by percentage descending
 	extraFs.sort((a, b) => b[1] - a[1])

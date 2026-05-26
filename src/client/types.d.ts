@@ -30,7 +30,7 @@ export interface SystemRecord extends BaseRecord {
 	host: string
 	status: "up" | "down" | "unknown" | "paused" | "pending"
 	port?: string
-	info: SystemInfo
+	info: SystemInfo | null
 	v?: string
 	updated?: string
 	last_seen?: number | null

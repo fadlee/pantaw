@@ -56,12 +56,12 @@ export default function InfoBar({
 		}
 
 		// Use details if available, otherwise fall back to system.info
-		const hostname = details?.hostname ?? system.info.h
-		const kernel = details?.kernel ?? system.info.k
-		const cores = details?.cores ?? system.info.c ?? 0
-		const threads = details?.threads ?? system.info.t ?? 0
-		const cpuModel = details?.cpu ?? system.info.m
-		const os = details?.os ?? system.info.os ?? Os.Linux
+		const hostname = details?.hostname ?? system.info?.h
+		const kernel = details?.kernel ?? system.info?.k
+		const cores = details?.cores ?? system.info?.c ?? 0
+		const threads = details?.threads ?? system.info?.t ?? 0
+		const cpuModel = details?.cpu ?? system.info?.m
+		const os = details?.os ?? system.info?.os ?? Os.Linux
 		const osName = details?.os_name
 		const arch = details?.arch
 		const memory = details?.memory
@@ -99,10 +99,10 @@ export default function InfoBar({
 				hide: hostname === system.host || hostname === system.name,
 			},
 			{
-				value: secondsToUptimeString(system.info.u ?? 0),
+				value: secondsToUptimeString(system.info?.u ?? 0),
 				Icon: ClockArrowUp,
 				label: t`Uptime`,
-				hide: !system.info.u,
+				hide: !system.info?.u,
 			},
 			osInfo[os],
 			{
@@ -166,15 +166,15 @@ export default function InfoBar({
 									{translatedStatus}
 								</div>
 							</TooltipTrigger>
-							{system.info.ct && (
+							{system.info?.ct && (
 								<TooltipContent>
 									<div className="flex gap-1 items-center">
-										{system.info.ct === ConnectionType.WebSocket ? (
+										{system.info?.ct === ConnectionType.WebSocket ? (
 											<WebSocketIcon className="size-4" />
 										) : (
 											<ChevronRightSquareIcon className="size-4" strokeWidth={2} />
 										)}
-										{connectionTypeLabels[system.info.ct as ConnectionType]}
+										{connectionTypeLabels[system.info?.ct as ConnectionType]}
 									</div>
 								</TooltipContent>
 							)}
