@@ -2,10 +2,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { GPUData } from "@/types"
 import { Trans } from "@lingui/react/macro"
 import { ContainerIcon, CpuIcon, HardDriveIcon, TerminalSquareIcon } from "lucide-react"
-import { memo, useState } from "react"
+import { memo, useMemo, useState } from "react"
 import ContainersTable from "../containers-table/containers-table"
 import SystemdTable from "../systemd-table/systemd-table"
 import { GpuIcon } from "../ui/icons"
+import { latestContainers } from "./system/chart-data"
 import { ContainerCpuChart, CpuChart } from "./system/charts/cpu-charts"
 import { ExtraFsCharts, RootDiskCharts } from "./system/charts/disk-charts"
 import { GpuDetailCharts, GpuPowerChart } from "./system/charts/gpu-charts"
@@ -49,6 +50,8 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 	// extra margin to add to bottom of page, specifically for temperature chart,
 	// where the tooltip can go past the bottom of the page if lots of sensors
 	const [pageBottomExtraMargin, setPageBottomExtraMargin] = useState(0)
+
+	const containerRows = useMemo(() => latestContainers(containerData), [containerData])
 
 	if (!system.id) {
 		return null
@@ -135,7 +138,7 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 
 				<ExtraFsCharts systemData={systemData} />
 
-				{hasContainersTable && <LazyContainersTable systemId={system.id} />}
+				{hasContainersTable && <LazyContainersTable data={containerRows} />}
 
 				{hasSystemd && <LazySystemdTable systemId={system.id} />}
 			</>
@@ -246,7 +249,7 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 										networkConfig={containerChartConfigs.network}
 									/>
 								</div>
-								{hasContainersTable && <ContainersTable systemId={system.id} />}
+								{hasContainersTable && <ContainersTable data={containerRows} />}
 							</>
 						)}
 					</TabsContent>

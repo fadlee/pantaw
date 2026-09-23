@@ -1,7 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { ContainerStatsRecord } from "@/types"
 import { Trans, useLingui } from "@lingui/react/macro"
 import {
 	type ColumnFiltersState,
@@ -15,16 +14,13 @@ import {
 } from "@tanstack/react-table"
 import { ContainerIcon, SearchIcon } from "lucide-react"
 import { useMemo, useState } from "react"
-import { cache } from "../routes/system/chart-data"
 import { type ContainerTableRow, containersTableColumns } from "./containers-table-columns"
 
 export default function ContainersTable({
-	systemId,
 	data,
 	showSystemColumn = false,
 }: {
-	systemId?: string
-	data?: ContainerTableRow[]
+	data: ContainerTableRow[]
 	showSystemColumn?: boolean
 }) {
 	const { t } = useLingui()
@@ -35,19 +31,7 @@ export default function ContainersTable({
 		system: showSystemColumn,
 	})
 
-	const tableData = useMemo<ContainerTableRow[]>(() => {
-		if (data) return data
-		if (!systemId) return []
-		for (const [key, val] of cache.entries()) {
-			if (key.startsWith(`${systemId}_`) && key.endsWith("_container_stats") && Array.isArray(val)) {
-				const lastRecord = val.at(-1) as ContainerStatsRecord | undefined
-				if (lastRecord && Array.isArray(lastRecord.stats)) {
-					return lastRecord.stats.map((s) => ({ ...s, system: systemId }))
-				}
-			}
-		}
-		return []
-	}, [data, systemId])
+	const tableData = data
 
 	const table = useReactTable({
 		data: tableData,

@@ -1,14 +1,15 @@
 import { useIntersectionObserver } from "@/lib/use-intersection-observer"
 import { cn } from "@/lib/utils"
 import { lazy } from "react"
+import type { ContainerTableRow } from "../../containers-table/containers-table-columns"
 
 const ContainersTable = lazy(() => import("../../containers-table/containers-table"))
 
-export function LazyContainersTable({ systemId }: { systemId: string }) {
+export function LazyContainersTable({ data }: { data: ContainerTableRow[] }) {
 	const { isIntersecting, ref } = useIntersectionObserver({ rootMargin: "90px" })
 	return (
 		<div ref={ref} className={cn(isIntersecting && "contents")}>
-			{isIntersecting && <ContainersTable systemId={systemId} />}
+			{isIntersecting && <ContainersTable data={data} />}
 		</div>
 	)
 }

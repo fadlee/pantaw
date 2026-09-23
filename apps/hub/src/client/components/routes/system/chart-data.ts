@@ -1,6 +1,6 @@
 import { apiClient, getFromTimestamp } from "@/lib/api"
 import { chartTimeData } from "@/lib/utils"
-import type { ChartData, ChartTimes, ContainerStatsRecord, SystemStatsRecord } from "@/types"
+import type { ChartData, ChartTimes, ContainerStats, ContainerStatsRecord, SystemStatsRecord } from "@/types"
 import { timeTicks } from "d3-time"
 
 type ChartTimeData = {
@@ -139,7 +139,8 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 							stats: (m.extra?.containers ?? []).map((c) => ({
 								n: c.name,
 								c: c.cpu ?? 0,
-								m: c.mem ?? 0,
+								// agent reports bytes; UI expects MB
+								m: (c.mem ?? 0) / 1024 / 1024,
 								ns: c.net_tx ?? 0,
 								nr: c.net_rx ?? 0,
 								b: [c.net_tx ?? 0, c.net_rx ?? 0] as [number, number],
@@ -241,6 +242,16 @@ export function makeContainerData(containers: ContainerStatsRecord[]): ChartData
 		result.push(makeContainerPoint(new Date(created).getTime(), stats))
 	}
 	return result
+}
+
+/** Containers from the most recent non-gap point of chart container data. */
+export function latestContainers(points: ChartData["containerData"] | undefined): ContainerStats[] {
+	if (!points) return []
+	for (let i = points.length - 1; i >= 0; i--) {
+		const { created, ...containers } = points[i]
+		if (created != null) return Object.values(containers) as ContainerStats[]
+	}
+	return []
 }
 
 /** Transform a single realtime container stats message into a ChartDataContainer point. */

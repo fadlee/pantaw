@@ -5,12 +5,12 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Unit } from "@/lib/enums"
 import { $systems } from "@/lib/stores"
 import { decimalString, formatBytes, toFixedFloat } from "@/lib/utils"
-import type { ContainerStatsRecord } from "@/types"
+import type { ChartData, ContainerStatsRecord } from "@/types"
 import { Trans, useLingui } from "@lingui/react/macro"
 import { useStore } from "@nanostores/react"
 import { BoxIcon, CpuIcon, MemoryStickIcon, ServerIcon } from "lucide-react"
 import { memo, useEffect, useMemo, useState } from "react"
-import { cache, getStats } from "./system/chart-data"
+import { cache, getStats, latestContainers } from "./system/chart-data"
 
 export default memo(function Containers() {
 	const systems = useStore($systems)
@@ -34,18 +34,16 @@ export default memo(function Containers() {
 
 			await Promise.allSettled(
 				systems.map(async (sys) => {
-					// Check cache first
-					const cached = cache.get(`${sys.id}_1h_container_stats`) as ContainerStatsRecord[] | undefined
-					let records = cached
-					if (!records || !records.length) {
-						records = await getStats<ContainerStatsRecord>("container_stats", sys.id, "1h")
+					// The system page caches chart points (keyed by container name), not raw records
+					let latest = latestContainers(
+						cache.get(`${sys.id}_1h_container_stats`) as ChartData["containerData"] | undefined
+					)
+					if (!latest.length) {
+						const records = await getStats<ContainerStatsRecord>("container_stats", sys.id, "1h")
+						latest = records.at(-1)?.stats ?? []
 					}
-					const lastRecord = records?.at(-1)
-					if (lastRecord && Array.isArray(lastRecord.stats) && lastRecord.stats.length > 0) {
-						results[sys.id] = lastRecord.stats.map((c) => ({
-							...c,
-							system: sys.id,
-						}))
+					if (latest.length > 0) {
+						results[sys.id] = latest.map((c) => ({ ...c, system: sys.id }))
 					}
 				})
 			)
