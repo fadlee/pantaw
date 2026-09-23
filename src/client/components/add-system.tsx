@@ -79,11 +79,11 @@ function TokenRevealDialog({
   -v /:/rootfs:ro \\
   -e HUB_URL="${hubUrl}" \\
   -e AGENT_TOKEN="${agentToken}" \\
-  pantaw/agent:latest`
+  ghcr.io/fadlee/pantaw-agent:latest`
 
 	const dockerComposeCode = `services:
   pantaw-agent:
-    image: pantaw/agent:latest
+    image: ghcr.io/fadlee/pantaw-agent:latest
     container_name: pantaw-agent
     restart: unless-stopped
     network_mode: host
@@ -94,9 +94,7 @@ function TokenRevealDialog({
       - HUB_URL=${hubUrl}
       - AGENT_TOKEN=${agentToken}`
 
-	const binaryCode = `export HUB_URL="${hubUrl}"
-export AGENT_TOKEN="${agentToken}"
-./pantaw-agent`
+	const installScriptCode = `curl -sL https://raw.githubusercontent.com/fadlee/pantaw/main/install-agent.sh | bash -s -- -u "${hubUrl}" -t "${agentToken}"`
 
 	function copyToken() {
 		copyToClipboard(agentToken).then(() => {
@@ -182,9 +180,9 @@ export AGENT_TOKEN="${agentToken}"
 							</TabsContent>
 							<TabsContent value="binary" className="space-y-2 pt-2">
 								<p className="text-xs text-muted-foreground">
-									<Trans>Run standalone Linux binary with environment variables:</Trans>
+									<Trans>Automatic 1-line installer (downloads binary & sets up systemd service):</Trans>
 								</p>
-								<CodeSnippet code={binaryCode} />
+								<CodeSnippet code={installScriptCode} />
 							</TabsContent>
 						</Tabs>
 					</div>
