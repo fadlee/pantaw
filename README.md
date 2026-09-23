@@ -110,11 +110,24 @@ Navigate to your Worker's URL to complete the initial admin setup.
 
 ### Option A: One-line Shell Installer (Linux)
 
+Run it and answer the prompts. The installer asks for the Hub URL (and checks it is reachable), the agent token (input hidden), the reporting interval and Docker monitoring, then installs the binary, verifies its SHA-256 checksum and sets up a `pantaw-agent` systemd service that starts on boot.
+
+```bash
+curl -sSL https://raw.githubusercontent.com/fadlee/pantaw/main/install-agent.sh | sudo bash
+```
+
+Non-interactive, for provisioning scripts:
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/fadlee/pantaw/main/install-agent.sh | sudo bash -s -- \
   --hub-url https://your-pantaw-hub.workers.dev \
-  --token YOUR_AGENT_TOKEN
+  --token YOUR_AGENT_TOKEN \
+  --yes
 ```
+
+- **Upgrade:** run the installer again. It keeps the existing `/etc/pantaw/agent.env` (press Enter at each prompt) and restarts the service on the new binary.
+- **Uninstall:** `curl -sSL https://raw.githubusercontent.com/fadlee/pantaw/main/install-agent.sh | sudo bash -s -- --uninstall`
+- **All options:** `--help` (`--interval`, `--docker`/`--no-docker`, `--version`, `--no-service`).
 
 ### Option B: Docker Container
 

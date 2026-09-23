@@ -94,7 +94,7 @@ function TokenRevealDialog({
       - HUB_URL=${hubUrl}
       - AGENT_TOKEN=${agentToken}`
 
-	const installScriptCode = `curl -sL https://raw.githubusercontent.com/fadlee/pantaw/main/install-agent.sh | bash -s -- -u "${hubUrl}" -t "${agentToken}"`
+	const installScriptCode = `curl -sL https://raw.githubusercontent.com/fadlee/pantaw/main/install-agent.sh | sudo bash -s -- -u "${hubUrl}" -t "${agentToken}"`
 
 	function copyToken() {
 		copyToClipboard(agentToken).then(() => {
