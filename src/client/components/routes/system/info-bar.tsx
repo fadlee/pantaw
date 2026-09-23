@@ -61,7 +61,20 @@ export default function InfoBar({
 		const cores = details?.cores ?? system.info?.c ?? 0
 		const threads = details?.threads ?? system.info?.t ?? 0
 		const cpuModel = details?.cpu ?? system.info?.m
-		const os = details?.os ?? system.info?.os ?? Os.Linux
+		const rawOs: unknown = details?.os ?? system.info?.os
+		let osEnum = Os.Linux
+		if (typeof rawOs === "number") {
+			osEnum = rawOs as Os
+		} else if (typeof rawOs === "string") {
+			const lower = rawOs.toLowerCase()
+			if (lower.includes("darwin") || lower.includes("mac") || lower.includes("apple")) {
+				osEnum = Os.Darwin
+			} else if (lower.includes("win")) {
+				osEnum = Os.Windows
+			} else if (lower.includes("bsd")) {
+				osEnum = Os.FreeBSD
+			}
+		}
 		const osName = details?.os_name
 		const arch = details?.arch
 		const memory = details?.memory
@@ -69,26 +82,24 @@ export default function InfoBar({
 		const osInfo = {
 			[Os.Linux]: {
 				Icon: TuxIcon,
-				// show kernel in tooltip if os name is available, otherwise show the kernel
-				value: osName || kernel,
+				value: osName || kernel || "Linux",
 				label: osName ? kernel : undefined,
 			},
 			[Os.Darwin]: {
 				Icon: AppleIcon,
-				value: osName || `macOS ${kernel}`,
+				value: osName || (kernel ? `macOS ${kernel}` : "macOS"),
 			},
 			[Os.Windows]: {
 				Icon: WindowsIcon,
-				value: osName || kernel,
+				value: osName || kernel || "Windows",
 				label: osName ? kernel : undefined,
 			},
 			[Os.FreeBSD]: {
 				Icon: FreeBsdIcon,
-				value: osName || kernel,
+				value: osName || kernel || "FreeBSD",
 				label: osName ? kernel : undefined,
 			},
 		}
-
 		const info = [
 			{ value: getHostDisplayValue(system), Icon: GlobeIcon },
 			{
@@ -104,14 +115,14 @@ export default function InfoBar({
 				label: t`Uptime`,
 				hide: !system.info?.u,
 			},
-			osInfo[os],
+			osInfo[osEnum] ?? osInfo[Os.Linux],
 			{
 				value: cpuModel,
 				Icon: CpuIcon,
 				hide: !cpuModel,
 				label: `${plural(cores, { one: "# core", other: "# cores" })} / ${plural(threads, { one: "# thread", other: "# threads" })}${arch ? ` / ${arch}` : ""}`,
 			},
-		] as {
+		].filter(Boolean) as {
 			value: string | number | undefined
 			label?: string
 			Icon: React.ElementType
@@ -180,10 +191,11 @@ export default function InfoBar({
 							)}
 						</Tooltip>
 
-						{systemInfo.map(({ value, label, Icon, hide }) => {
-							if (hide || !value) {
+						{systemInfo.map((item) => {
+							if (!item || item.hide || !item.value) {
 								return null
 							}
+							const { value, label, Icon } = item
 							const content = (
 								<div className="flex gap-1.5 items-center">
 									<Icon className="h-4 w-4" /> {value}

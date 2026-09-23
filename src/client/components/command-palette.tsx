@@ -176,16 +176,16 @@ export default memo(function CommandPalette({
 							{SettingsShortcut}
 						</CommandItem>
 						<CommandItem
-							keywords={["help", "oauth", "oidc"]}
+							keywords={["help", "docs", "guide"]}
 							onSelect={() => {
-								window.location.href = "https://beszel.dev/guide/what-is-beszel"
+								window.open("https://github.com/fadlee/pantaw", "_blank")
 							}}
 						>
 							<BookIcon className="me-2 size-4" />
 							<span>
 								<Trans>Documentation</Trans>
 							</span>
-							<CommandShortcut>beszel.dev</CommandShortcut>
+							<CommandShortcut>github</CommandShortcut>
 						</CommandItem>
 					</CommandGroup>
 					{isAdmin() && (

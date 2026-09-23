@@ -53,7 +53,18 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		await c.env.DB.prepare(
 			`INSERT INTO alerts (id, system_id, metric, threshold, operator, duration_s, enabled, webhook_url)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-		).bind(id, body.system_id, body.metric, body.threshold, body.operator, durationS, enabled, body.webhook_url ?? null).run()
+		)
+			.bind(
+				id,
+				body.system_id,
+				body.metric,
+				body.threshold,
+				body.operator,
+				durationS,
+				enabled,
+				body.webhook_url ?? null
+			)
+			.run()
 		const row = await c.env.DB.prepare("SELECT * FROM alerts WHERE id = ?").bind(id).first<AlertRow>()
 		if (!row) return c.json({ error: "create_failed" }, 500)
 		return c.json(rowToResponse(row), 201)
@@ -63,15 +74,35 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		const body = c.req.valid("json")
 		const updates: string[] = []
 		const values: (string | number | null)[] = []
-		if (body.metric !== undefined) { updates.push("metric = ?"); values.push(body.metric) }
-		if (body.operator !== undefined) { updates.push("operator = ?"); values.push(body.operator) }
-		if (body.threshold !== undefined) { updates.push("threshold = ?"); values.push(body.threshold) }
-		if (body.duration_s !== undefined) { updates.push("duration_s = ?"); values.push(body.duration_s) }
-		if (body.enabled !== undefined) { updates.push("enabled = ?"); values.push(body.enabled ? 1 : 0) }
-		if (body.webhook_url !== undefined) { updates.push("webhook_url = ?"); values.push(body.webhook_url) }
+		if (body.metric !== undefined) {
+			updates.push("metric = ?")
+			values.push(body.metric)
+		}
+		if (body.operator !== undefined) {
+			updates.push("operator = ?")
+			values.push(body.operator)
+		}
+		if (body.threshold !== undefined) {
+			updates.push("threshold = ?")
+			values.push(body.threshold)
+		}
+		if (body.duration_s !== undefined) {
+			updates.push("duration_s = ?")
+			values.push(body.duration_s)
+		}
+		if (body.enabled !== undefined) {
+			updates.push("enabled = ?")
+			values.push(body.enabled ? 1 : 0)
+		}
+		if (body.webhook_url !== undefined) {
+			updates.push("webhook_url = ?")
+			values.push(body.webhook_url)
+		}
 		if (updates.length === 0) return c.json({ error: "no_fields_to_update" }, 400)
 		values.push(id)
-		const result = await c.env.DB.prepare(`UPDATE alerts SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run()
+		const result = await c.env.DB.prepare(`UPDATE alerts SET ${updates.join(", ")} WHERE id = ?`)
+			.bind(...values)
+			.run()
 		if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404)
 		const row = await c.env.DB.prepare("SELECT * FROM alerts WHERE id = ?").bind(id).first<AlertRow>()
 		if (!row) return c.json({ error: "not_found" }, 404)

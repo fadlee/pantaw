@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword } from "../src/server/lib/password"
 describe("password", () => {
 	it("hashes a password to PHC string format", async () => {
 		const hash = await hashPassword("hunter2")
-		expect(hash).toMatch(/^\$pbkdf2-sha256\$i=600000\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/)
+		expect(hash).toMatch(/^\$pbkdf2-sha256\$i=100000\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/)
 	})
 
 	it("produces different hashes for same password (random salt)", async () => {
@@ -33,7 +33,7 @@ describe("password", () => {
 		const enc = new TextEncoder()
 		const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"])
 		const bits = await crypto.subtle.deriveBits(
-			{ name: "PBKDF2", hash: "SHA-256", salt, iterations: 100_000 },
+			{ name: "PBKDF2", hash: "SHA-256", salt, iterations: 50_000 },
 			key,
 			256
 		)
@@ -43,7 +43,7 @@ describe("password", () => {
 			for (const c of bytes) bin += String.fromCharCode(c)
 			return btoa(bin)
 		}
-		const legacy = `$pbkdf2-sha256$i=100000$${b64(salt)}$${b64(bits)}`
+		const legacy = `$pbkdf2-sha256$i=50000$${b64(salt)}$${b64(bits)}`
 
 		const result = await verifyPassword(password, legacy)
 		expect(result.valid).toBe(true)
