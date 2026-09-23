@@ -172,3 +172,45 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  publish-npm:
+    name: Publish CLI to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Check CLI version matches tag
+        run: |
+          CLI_VERSION=$(node -p "require('./packages/cli/package.json').version")
+          if [ "v${CLI_VERSION}" != "${{ github.ref_name }}" ]; then
+            echo "packages/cli is ${CLI_VERSION}, tag is ${{ github.ref_name }}" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build client & worker
+        run: bun run build
+
+      # prepack builds the CLI and copies the hub build into bundle/.
+      - name: Publish
+        working-directory: ./packages/cli
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

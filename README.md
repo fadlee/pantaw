@@ -50,12 +50,35 @@ Pantaw is a modern, cost-efficient server monitoring system designed to run enti
 
 ## Quickstart: Deploy Hub to Cloudflare
 
-### Prerequisites
+```bash
+bunx pantaw deploy        # or: npx pantaw deploy
+```
+
+The wizard walks through everything: it opens the Cloudflare API token page with the right permissions pre-selected (Workers Scripts, D1, Workers KV Storage — all Edit), creates the D1 database and KV namespaces, applies migrations, deploys the Worker to `https://<name>.<subdomain>.workers.dev`, generates the JWT signing secret, creates your admin account the moment the hub is up, and can register your first server and print its agent install command.
+
+Run the same command again to upgrade: it migrates and redeploys the hub version bundled with that CLI release, keeping all data.
+
+| Command | What it does |
+|---|---|
+| `bunx pantaw deploy [--name <instance>]` | First deploy (wizard) or upgrade of an existing instance |
+| `bunx pantaw status [--name <instance>]` | Show an instance's resources and probe its health |
+| `bunx pantaw list` | List instances configured on this machine |
+| `bunx pantaw destroy [--name <instance>]` | Delete the Worker, D1 database and KV namespaces |
+
+Each instance is named after its Worker (default `pantaw`), so one account can run several (`pantaw`, `pantaw-staging`, …). Their state lives in `~/.config/pantaw/<name>.json` (mode 600); the API token is only stored there if you say so. If a Worker with that name already exists — say one deployed by hand — `deploy` offers to take it over and keeps using the database and namespaces it is bound to.
+
+For CI, pass `--yes` and set `CLOUDFLARE_API_TOKEN` (plus `CLOUDFLARE_ACCOUNT_ID` if the token sees several accounts, and `PANTAW_ADMIN_EMAIL` / `PANTAW_ADMIN_PASSWORD` for the first deploy).
+
+### Manual deploy
+
+Prefer running wrangler yourself? From a clone of this repo:
+
+#### Prerequisites
 
 - [Bun](https://bun.sh) (v1.1+)
 - [Cloudflare Account](https://cloudflare.com) and [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
 
-### 1. Clone and Install Dependencies
+#### 1. Clone and Install Dependencies
 
 ```bash
 git clone https://github.com/fadlee/pantaw.git
@@ -63,7 +86,7 @@ cd pantaw
 bun install
 ```
 
-### 2. Provision Cloudflare Resources
+#### 2. Provision Cloudflare Resources
 
 Create the D1 database and KV namespaces:
 
@@ -76,7 +99,7 @@ bunx wrangler kv namespace create RATE_KV
 
 Update your `wrangler.toml` with the generated database ID and KV namespace IDs.
 
-### 3. Configure Secrets
+#### 3. Configure Secrets
 
 Set up JWT signing secrets:
 
@@ -92,7 +115,7 @@ JWT_SECRET_V1="your-local-dev-secret-at-least-32-chars-long"
 JWT_KID_CURRENT="v1"
 ```
 
-### 4. Build and Deploy
+#### 4. Build and Deploy
 
 ```bash
 # Build SPA frontend and worker bundle

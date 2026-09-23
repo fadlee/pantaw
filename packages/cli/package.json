@@ -1,0 +1,36 @@
+{
+	"name": "pantaw",
+	"version": "0.3.0",
+	"description": "Deploy and upgrade a Pantaw monitoring hub on your Cloudflare account",
+	"type": "module",
+	"license": "MIT",
+	"bin": {
+		"pantaw": "./dist/cli.js"
+	},
+	"files": ["dist", "bundle", "README.md"],
+	"engines": {
+		"node": ">=20"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/fadlee/pantaw.git",
+		"directory": "packages/cli"
+	},
+	"scripts": {
+		"build": "bun build ./src/cli.ts --outdir dist --target node --format esm --external wrangler",
+		"bundle": "bun run scripts/bundle.ts",
+		"prepack": "bun run build && bun run bundle",
+		"dev": "bun run src/cli.ts",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"wrangler": "^4"
+	},
+	"devDependencies": {
+		"@clack/prompts": "^1",
+		"@types/bun": "latest",
+		"picocolors": "^1",
+		"typescript": "^5.7.2"
+	}
+}

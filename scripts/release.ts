@@ -116,14 +116,19 @@ async function main() {
 		process.exit(0)
 	}
 
-	// 7. Update package.json
+	// 7. Update package.json, and the CLI's: it ships this release's hub build,
+	// so its version has to match the tag (release.yml checks).
 	pkg.version = targetVersion
 	writeFileSync(pkgPath, `${JSON.stringify(pkg, null, "\t")}\n`)
-	console.log(`✔ Updated package.json version to ${targetVersion}`)
+	const cliPkgPath = "./packages/cli/package.json"
+	const cliPkg = JSON.parse(readFileSync(cliPkgPath, "utf-8"))
+	cliPkg.version = targetVersion
+	writeFileSync(cliPkgPath, `${JSON.stringify(cliPkg, null, "\t")}\n`)
+	console.log(`✔ Updated package.json and ${cliPkgPath} version to ${targetVersion}`)
 
 	// 8. Git commit & tag
 	try {
-		execSync(`git add ${pkgPath}`, { stdio: "inherit" })
+		execSync(`git add ${pkgPath} ${cliPkgPath}`, { stdio: "inherit" })
 		execSync(`git commit -m "chore: release ${newTag}"`, { stdio: "inherit" })
 		execSync(`git tag -a ${newTag} -m "Release ${newTag}"`, { stdio: "inherit" })
 		console.log(`✔ Created git commit & annotated tag \x1b[32m${newTag}\x1b[0m`)
@@ -141,6 +146,7 @@ async function main() {
 	console.log(`  • Build multi-arch Docker image -> ghcr.io/fadlee/pantaw-agent:latest & :${newTag}`)
 	console.log("  • Build cross-platform binaries (Linux, macOS, Windows, FreeBSD)")
 	console.log("  • Create GitHub Release with downloadable artifacts & checksums")
+	console.log("  • Publish the `pantaw` CLI to npm (bunx pantaw deploy)")
 
 	const pushConfirm = await rl.question("\nPush commit and tag to origin now? (Y/n): ")
 	if (pushConfirm.toLowerCase() !== "n") {

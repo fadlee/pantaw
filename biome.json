@@ -4,7 +4,15 @@
 		"enabled": true
 	},
 	"files": {
-		"ignore": ["dist", ".wrangler", "node_modules", "src/client/locales", "src/client/index.css"]
+		"ignore": [
+			"dist",
+			"packages/*/dist",
+			"packages/*/bundle",
+			".wrangler",
+			"node_modules",
+			"src/client/locales",
+			"src/client/index.css"
+		]
 	},
 	"formatter": {
 		"enabled": true,

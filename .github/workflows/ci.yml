@@ -44,6 +44,13 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: CLI (typecheck, test, pack)
+        working-directory: ./packages/cli
+        run: |
+          bun run typecheck
+          bun test
+          npm pack --dry-run
   agent:
     name: Agent (Vet, Test, Build)
     runs-on: ubuntu-latest
