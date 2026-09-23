@@ -20,8 +20,8 @@ State lives in `~/.config/pantaw/<name>.json` (mode 600). Non-interactive use: `
 Each release of this package carries the hub from the same release, so the CLI version you run is the hub version you get:
 
 ```bash
-bunx pantaw@latest deploy   # upgrade to the newest hub
-bunx pantaw@0.4.1 deploy    # deploy a specific version
+bunx pantaw@latest deploy     # upgrade to the newest hub
+bunx pantaw@<version> deploy  # deploy that exact hub version
 ```
 
 MIT licensed.
