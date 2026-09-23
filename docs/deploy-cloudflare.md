@@ -7,7 +7,6 @@
 - D1: `pantaw` (`70b13a79-b2b1-4148-862f-c12e018a3668`)
 - KV `SESSION_KV`: `5ef2ea47791b4a90ae84a602638a4198`
 - KV `RATE_KV`: `4e22de223a9a4d9e95c9184a1e20a9d3`
-- KV `CACHE_KV`: `9dded0f287074798beadd4fd5e394aec`
 
 `wrangler.toml` sudah diupdate dengan binding IDs di atas.
 

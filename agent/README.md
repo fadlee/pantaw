@@ -19,7 +19,7 @@ Env vars:
 
 - `HUB_URL` — required, contoh `https://your-hub.workers.dev`
 - `AGENT_TOKEN` — required, token dari dashboard Pantaw
-- `INTERVAL` — optional, detik, default `30`
+- `INTERVAL` — optional, detik, default `30` (minimum `5`). Default 30s = 2 req/menit; minimum 5s = 12 req/menit.
 - `DOCKER` — optional, `true` untuk enable container stats, default `false`
 - `LOG_LEVEL` — optional, `debug|info|warn|error`, default `info`
 
@@ -134,4 +134,4 @@ Agent mengirim payload ke `/api/v1/ingest` seperti ini:
 
 - Cookie/session tidak dipakai oleh agent, hanya Bearer token
 - Tidak ada persistent buffer di MVP; data selama outage bisa hilang
-- `INTERVAL` minimum 5 detik
+- `INTERVAL` minimum 5 detik (12 req/menit). Rate limiter di hub diset pada 15 req/menit per-token untuk memberikan headroom toleransi.

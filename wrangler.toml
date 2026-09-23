@@ -27,16 +27,12 @@ id = "5ef2ea47791b4a90ae84a602638a4198"
 binding = "RATE_KV"
 id = "4e22de223a9a4d9e95c9184a1e20a9d3"
 
-[[kv_namespaces]]
-binding = "CACHE_KV"
-id = "9dded0f287074798beadd4fd5e394aec"
-
 # Workers Rate Limiting binding (per-token, untuk /api/v1/ingest)
 [[unsafe.bindings]]
 name = "INGEST_LIMITER"
 type = "ratelimit"
 namespace_id = "1001"
-simple = { limit = 3, period = 60 }
+simple = { limit = 15, period = 60 }
 
 # Cron triggers (alert + status checker, metrics cleanup)
 [triggers]

@@ -5,6 +5,7 @@ import { sha256Hex } from "../lib/crypto"
 export type AgentAuthVars = {
 	systemId: string
 	tokenHash: string
+	systemHost: string
 }
 
 /**
@@ -27,15 +28,29 @@ export const agentAuth = createMiddleware<{ Bindings: Env; Variables: AgentAuthV
 
 	const tokenHash = await sha256Hex(token)
 
-	const row = await c.env.DB.prepare("SELECT system_id FROM agent_tokens WHERE token_hash = ? LIMIT 1")
+	const row = await c.env.DB.prepare(
+		"SELECT t.id, t.system_id, t.last_used, s.host FROM agent_tokens t JOIN systems s ON s.id = t.system_id WHERE t.token_hash = ? LIMIT 1"
+	)
 		.bind(tokenHash)
-		.first<{ system_id: string }>()
+		.first<{ id: string; system_id: string; last_used: number | null; host: string | null }>()
 
 	if (!row) {
 		return c.json({ error: "invalid_token" }, 401)
 	}
 
 	c.set("systemId", row.system_id)
+	c.set("systemHost", row.host || "")
 	c.set("tokenHash", tokenHash)
+	const nowSec = Math.floor(Date.now() / 1000)
+	if (!row.last_used || row.last_used < nowSec - 3600) {
+		const updatePromise = c.env.DB.prepare("UPDATE agent_tokens SET last_used = ? WHERE id = ?")
+			.bind(nowSec, row.id)
+			.run()
+		try {
+			c.executionCtx.waitUntil(updatePromise)
+		} catch {
+			await updatePromise
+		}
+	}
 	await next()
 })

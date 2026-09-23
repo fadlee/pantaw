@@ -104,17 +104,13 @@ app.post("/", agentAuth, vValidator("json", IngestBodySchema), async (c) => {
 			c.req.header("x-real-ip") ||
 			c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
 			""
-		if (clientIp) {
+		const currentHost = c.get("systemHost")
+		if (clientIp && !currentHost) {
 			await c.env.DB.prepare(
 				"UPDATE systems SET host = ?, updated_at = ? WHERE id = ? AND (host = '' OR host IS NULL)"
-			).bind(clientIp, nowSec, systemId).run()
-		}
-
-		const latest = payloads[payloads.length - 1]
-		if (latest) {
-			await c.env.CACHE_KV.put(`metrics:${systemId}:latest`, JSON.stringify(latest), {
-				expirationTtl: 90,
-			})
+			)
+				.bind(clientIp, nowSec, systemId)
+				.run()
 		}
 		return c.body(null, 204)
 	} catch (err) {

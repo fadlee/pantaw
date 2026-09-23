@@ -176,16 +176,6 @@ describe("/api/v1/ingest", () => {
 		expect(parsed.containers).toHaveLength(1)
 	})
 
-	it("populates CACHE_KV with latest payload", async () => {
-		const payload = validPayload({ cpu: 77.7 })
-		await worker.fetch(ingestRequest(payload), env)
-
-		const cached = await env.CACHE_KV.get(`metrics:${SYSTEM_ID}:latest`)
-		expect(cached).toBeTruthy()
-		const parsed = JSON.parse(cached ?? "{}")
-		expect(parsed.cpu).toBe(77.7)
-	})
-
 	it("automatically updates system host from cf-connecting-ip when empty", async () => {
 		await env.DB.prepare("UPDATE systems SET host = '' WHERE id = ?").bind(SYSTEM_ID).run()
 
@@ -201,7 +191,9 @@ describe("/api/v1/ingest", () => {
 		const res = await worker.fetch(req, env)
 		expect(res.status).toBe(204)
 
-		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?").bind(SYSTEM_ID).first<{ host: string }>()
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?")
+			.bind(SYSTEM_ID)
+			.first<{ host: string }>()
 		expect(row?.host).toBe("203.0.113.195")
 	})
 
@@ -220,7 +212,9 @@ describe("/api/v1/ingest", () => {
 		const res = await worker.fetch(req, env)
 		expect(res.status).toBe(204)
 
-		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?").bind(SYSTEM_ID).first<{ host: string }>()
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?")
+			.bind(SYSTEM_ID)
+			.first<{ host: string }>()
 		expect(row?.host).toBe("10.0.0.5")
 	})
 
@@ -239,23 +233,25 @@ describe("/api/v1/ingest", () => {
 		const res = await worker.fetch(req, env)
 		expect(res.status).toBe(204)
 
-		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?").bind(SYSTEM_ID).first<{ host: string }>()
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?")
+			.bind(SYSTEM_ID)
+			.first<{ host: string }>()
 		expect(row?.host).toBe("198.51.100.22")
 	})
 
 	it("returns 429 when exceeding rate limit (per-token bucket)", async () => {
-		// Limit prod = 3/menit per token. Kirim 4 request berturut-turut
+		// Limit prod = 15/menit per token. Kirim 17 request berturut-turut
 		// dengan ts berbeda agar tidak kena idempotensi.
 		const baseTs = Math.floor(Date.now() / 1000)
 		const statuses: number[] = []
-		for (let i = 0; i < 5; i++) {
+		for (let i = 0; i < 17; i++) {
 			const res = await worker.fetch(ingestRequest(validPayload({ ts: baseTs - i })), env)
 			statuses.push(res.status)
 		}
-		// Yang sukses 3, sisanya 429
+		// Yang sukses 15, sisanya 429
 		const ok = statuses.filter((s) => s === 204).length
 		const limited = statuses.filter((s) => s === 429).length
-		expect(ok).toBe(3)
+		expect(ok).toBe(15)
 		expect(limited).toBe(2)
 	})
 })

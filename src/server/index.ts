@@ -9,7 +9,6 @@ export type Env = {
 	DB: D1Database
 	SESSION_KV: KVNamespace
 	RATE_KV: KVNamespace
-	CACHE_KV: KVNamespace
 	INGEST_LIMITER: RateLimit
 	JWT_SECRET_V1: string
 	JWT_KID_CURRENT: string

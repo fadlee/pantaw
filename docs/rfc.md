@@ -158,9 +158,8 @@ POST /api/v1/ingest
   1. Verify Bearer token → resolve system_id
   2. Validate payload (schema, ts dalam window wajar)
   3. INSERT OR IGNORE INTO metrics (system_id, ts, ...)  -- idempotent via PK (system_id, ts)
-  4. Update CACHE_KV: metrics:{system_id}:latest = payload (TTL 90s)
-  5. Update agent_tokens.last_used (best-effort, boleh di-skip jika hot path)
-  6. Return 204
+  4. Update agent_tokens.last_used (throttled best-effort via waitUntil)
+  5. Return 204
 ```
 
 Ingest hanya melakukan **1 D1 write** ke tabel `metrics`. Tabel `systems` tidak di-update per-ingest sehingga write D1 tidak berlipat ganda.
@@ -275,10 +274,8 @@ CREATE TABLE agent_tokens (
 
 | Namespace | Key | Value | TTL |
 |---|---|---|---|
-| `SESSION_KV` | `session:{user_id}:{jti}` | JSON user info | 30 hari |
+| `SESSION_KV` | `session:{user_id}:{jti}` | JSON user info (opsional/future) | 30 hari |
 | `RATE_KV` | `login:{email}` | Counter JSON | 15 menit |
-| `CACHE_KV` | `metrics:{system_id}:latest` | JSON metrik terakhir | 90 detik |
-
 `RATE_KV` sekarang hanya dipakai untuk login throttling (volume rendah, muat di kuota KV writes). Rate limiting `/ingest` tidak pakai KV karena volume tinggi (28.800/hari) akan melampaui 1000 KV writes/hari free tier.
 
 **Workers Rate Limiting binding** (di luar KV):
@@ -358,7 +355,7 @@ UI Pantaw di-fork dari [Beszel UI](https://github.com/henrygd/beszel/tree/main/i
 **Fitur MVP yang dipertahankan/ditambahkan:**
 
 - Login page
-- Dashboard: daftar semua system dengan status (polling 30s ke `CACHE_KV`)
+- Dashboard: daftar semua system dengan status (polling 30s ke API)
 - System detail: grafik CPU, memory, disk, network (time range: 1j, 6j, 24j, 7d)
 - Alert management: buat dan edit alert threshold
 - Settings: tambah/hapus system, generate API key, manage user (single admin di MVP)
@@ -451,7 +448,7 @@ Agent mengirim metrik dalam format JSON berikut setiap interval. Endpoint accept
 - Tipe data sesuai schema `metrics`
 - Ukuran payload ≤ 64KB (cukup untuk ≈1000 container)
 
-Workers memvalidasi payload ini, mengekstrak `system_id` dari token, lalu menulis 1 row ke `metrics` (D1) dan menyegarkan `CACHE_KV: metrics:{system_id}:latest`. Tidak ada state lain yang diupdate per-ingest; status agent dihitung secara dinamis dari `MAX(metrics.ts)` (lihat 4.2).
+Workers memvalidasi payload ini, mengekstrak `system_id` dari token, lalu menulis 1 row ke `metrics` (D1). Tidak ada state lain yang diupdate per-ingest; status agent dihitung secara dinamis dari `MAX(metrics.ts)` (lihat 4.2).
 
 ---
 
@@ -556,7 +553,7 @@ Mitigasi jika mendekati batas D1 writes:
 - [ ] Setup struktur `migrations/` dengan `0001_initial.sql` (semua tabel)
 - [ ] Setup D1 database (lokal + remote), apply migration awal (`metrics` pakai composite PK `(system_id, ts)` + `WITHOUT ROWID`)
 - [ ] Konfigurasi `INGEST_LIMITER` (Workers Rate Limiting binding) di `wrangler.toml`
-- [ ] Implementasi endpoint `/api/v1/ingest` (Hono + Valibot validator): validasi token, validasi `ts` window (clock skew), `INSERT OR IGNORE`, write-through `CACHE_KV`
+- [ ] Implementasi endpoint `/api/v1/ingest` (Hono + Valibot validator): validasi token, validasi `ts` window (clock skew), `INSERT OR IGNORE` (tanpa KV write)
 - [ ] Unit test: auth (token valid/invalid/expired), ingest (single/array payload, duplicate retry, clock skew rejection, rate limit)
 
 ### Fase 2 — API Lengkap (Minggu 3–4)
