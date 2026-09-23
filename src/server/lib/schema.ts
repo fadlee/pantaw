@@ -57,7 +57,7 @@ export const INITIAL_SCHEMA = [
 		webhook_url  TEXT,
 		last_fired   INTEGER
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_alerts_system ON alerts (system_id)`,
+	"CREATE INDEX IF NOT EXISTS idx_alerts_system ON alerts (system_id)",
 	`CREATE TABLE IF NOT EXISTS agent_tokens (
 		id          TEXT PRIMARY KEY,
 		system_id   TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
@@ -66,7 +66,7 @@ export const INITIAL_SCHEMA = [
 		created_at  INTEGER NOT NULL,
 		last_used   INTEGER
 	)`,
-	`CREATE INDEX IF NOT EXISTS idx_agent_tokens_system ON agent_tokens (system_id)`,
+	"CREATE INDEX IF NOT EXISTS idx_agent_tokens_system ON agent_tokens (system_id)",
 ]
 
 export async function ensureSchema(db: D1Database): Promise<void> {

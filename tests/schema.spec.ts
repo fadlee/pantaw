@@ -1,7 +1,9 @@
 import { env } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
+import migrationSql from "../migrations/0001_initial.sql?raw"
 import worker from "../src/server/index"
 import { ensureSchema, resetSchemaState } from "../src/server/lib/schema"
+import { INITIAL_SCHEMA } from "../src/server/lib/schema"
 
 describe("Auto-migration / schema initialization", () => {
 	it("automatically initializes tables on first request", async () => {
@@ -41,5 +43,27 @@ describe("Auto-migration / schema initialization", () => {
 			"SELECT name FROM sqlite_master WHERE type='table' AND name IN ('systems', 'users', 'metrics', 'alerts', 'agent_tokens')"
 		).all<{ name: string }>()
 		expect(tables.results.length).toBe(5)
+	})
+
+	it("matches migrations/0001_initial.sql strictly to prevent schema drift", () => {
+		const normalize = (sql: string) =>
+			sql
+				.replace(/--.*$/gm, "")
+				.replace(/IF NOT EXISTS/gi, "")
+				.replace(/\s+/g, " ")
+				.replace(/\(\s+/g, "(")
+				.replace(/\s+\)/g, ")")
+				.replace(/\s*,\s*/g, ", ")
+				.trim()
+				.toLowerCase()
+
+		const migrationStatements = migrationSql
+			.split(";")
+			.map((s) => normalize(s))
+			.filter((s) => s.length > 0)
+
+		const schemaStatements = INITIAL_SCHEMA.map((s) => normalize(s)).filter((s) => s.length > 0)
+
+		expect(migrationStatements).toEqual(schemaStatements)
 	})
 })
