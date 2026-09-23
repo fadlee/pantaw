@@ -1,9 +1,10 @@
 import { env } from "cloudflare:test"
 import { describe, expect, it } from "vitest"
 import migrationSql from "../migrations/0001_initial.sql?raw"
+import diskBytesSql from "../migrations/0002_disk_bytes.sql?raw"
 import worker from "../src/server/index"
 import { ensureSchema, resetSchemaState } from "../src/server/lib/schema"
-import { INITIAL_SCHEMA } from "../src/server/lib/schema"
+import { ADDED_COLUMNS, INITIAL_SCHEMA } from "../src/server/lib/schema"
 
 describe("Auto-migration / schema initialization", () => {
 	it("automatically initializes tables on first request", async () => {
@@ -65,5 +66,25 @@ describe("Auto-migration / schema initialization", () => {
 		const schemaStatements = INITIAL_SCHEMA.map((s) => normalize(s)).filter((s) => s.length > 0)
 
 		expect(migrationStatements).toEqual(schemaStatements)
+	})
+
+	it("adds columns from later migrations to a database built from INITIAL_SCHEMA", async () => {
+		resetSchemaState()
+		await env.DB.exec("DROP TABLE IF EXISTS metrics")
+		await env.DB.batch(INITIAL_SCHEMA.map((sql) => env.DB.prepare(sql)))
+
+		await ensureSchema(env.DB)
+		await ensureSchema(env.DB)
+
+		const { results } = await env.DB.prepare("SELECT name FROM pragma_table_info('metrics')").all<{
+			name: string
+		}>()
+		const names = results.map((r) => r.name)
+		for (const { column } of ADDED_COLUMNS) expect(names).toContain(column)
+	})
+
+	it("lists every column that 0002_disk_bytes.sql adds", () => {
+		const added = [...diskBytesSql.matchAll(/ADD COLUMN (\w+) (\w+)/gi)].map((m) => `${m[1]} ${m[2]}`)
+		expect(ADDED_COLUMNS.map((c) => `${c.column} ${c.type}`)).toEqual(added)
 	})
 })

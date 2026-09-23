@@ -30,7 +30,8 @@ const extraDiosMax =
 
 export const diskDataFns = {
 	// usage
-	usage: ({ stats }: SystemStatsRecord) => stats?.du ?? 0,
+	usage: ({ stats }: SystemStatsRecord) => stats?.du ?? null,
+	usagePct: ({ stats }: SystemStatsRecord) => stats?.dp ?? null,
 	extraUsage:
 		(name: string) =>
 		({ stats }: SystemStatsRecord) =>
@@ -119,6 +120,21 @@ export function DiskUsageChart({
 
 	const title = extraFsName ? `${extraFsName} ${t`Usage`}` : t`Disk Usage`
 	const description = extraFsName ? t`Disk usage of ${extraFsName}` : t`Usage of root partition`
+
+	// Agents before disk_used/disk_total only report the root disk percentage
+	if (!extraFsName && !(diskSize > 0)) {
+		return (
+			<ChartCard empty={dataEmpty} grid={grid} title={title} description={description}>
+				<AreaChartDefault
+					chartData={chartData}
+					domain={[0, 100]}
+					tickFormatter={(val) => `${toFixedFloat(val, 0)}%`}
+					contentFormatter={({ value }) => `${decimalString(value)}%`}
+					dataPoints={[{ label: t`Disk Usage`, color: 4, opacity: 0.4, dataKey: diskDataFns.usagePct }]}
+				/>
+			</ChartCard>
+		)
+	}
 
 	return (
 		<ChartCard empty={dataEmpty} grid={grid} title={title} description={description}>

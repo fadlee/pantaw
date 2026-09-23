@@ -192,6 +192,8 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 				mem_used?: number
 				mem_total?: number
 				disk?: number
+				disk_used?: number
+				disk_total?: number
 				disk_read?: number
 				disk_write?: number
 				net_rx?: number
@@ -214,6 +216,10 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 						mu: m.mem_used != null ? m.mem_used / 1024 / 1024 / 1024 : 0, // bytes -> GB
 						m: m.mem_total != null ? m.mem_total / 1024 / 1024 / 1024 : 0,
 						dp: m.disk ?? 0,
+						// undefined (not 0) from agents that predate disk_used/disk_total, so the
+						// disk chart can fall back to the percentage
+						du: m.disk_used != null ? m.disk_used / 1024 / 1024 / 1024 : undefined, // bytes -> GB
+						d: m.disk_total != null ? m.disk_total / 1024 / 1024 / 1024 : undefined,
 						dr: m.disk_read != null ? m.disk_read / 1024 / 1024 : 0, // bytes/s -> MB/s
 						dw: m.disk_write != null ? m.disk_write / 1024 / 1024 : 0,
 						ns: m.net_tx != null ? m.net_tx / 1024 / 1024 : 0, // bytes/s -> MB/s

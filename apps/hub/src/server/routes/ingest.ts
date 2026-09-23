@@ -16,6 +16,8 @@ const STORED_FIELDS = new Set([
 	"mem_used",
 	"mem_total",
 	"disk",
+	"disk_used",
+	"disk_total",
 	"disk_read",
 	"disk_write",
 	"net_rx",
@@ -63,9 +65,9 @@ app.post("/", agentAuth, vValidator("json", IngestBodySchema), async (c) => {
 
 		const stmt = c.env.DB.prepare(
 			`INSERT OR IGNORE INTO metrics
-			 (system_id, ts, cpu, mem, mem_used, mem_total, disk, disk_read, disk_write,
-			  net_rx, net_tx, load1, load5, load15, temp, extra)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			 (system_id, ts, cpu, mem, mem_used, mem_total, disk, disk_used, disk_total,
+			  disk_read, disk_write, net_rx, net_tx, load1, load5, load15, temp, extra)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
 
 		const batched = payloads.map((p) => {
@@ -85,6 +87,8 @@ app.post("/", agentAuth, vValidator("json", IngestBodySchema), async (c) => {
 				p.mem_used ?? null,
 				p.mem_total ?? null,
 				p.disk ?? null,
+				p.disk_used ?? null,
+				p.disk_total ?? null,
 				p.disk_read ?? null,
 				p.disk_write ?? null,
 				p.net_rx ?? null,

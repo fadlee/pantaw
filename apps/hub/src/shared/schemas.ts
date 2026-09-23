@@ -29,6 +29,8 @@ export const MetricsPayloadSchema = v.object({
 	mem_used: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 	mem_total: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 	disk: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(100))),
+	disk_used: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+	disk_total: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 	disk_read: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 	disk_write: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
 	net_rx: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),

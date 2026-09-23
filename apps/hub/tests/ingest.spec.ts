@@ -103,6 +103,21 @@ describe("/api/v1/ingest", () => {
 		expect(results[0]?.cpu).toBe(23.4)
 	})
 
+	it("stores root disk used/total bytes in their own columns", async () => {
+		const res = await worker.fetch(
+			ingestRequest(validPayload({ disk_used: 45_000_000_000, disk_total: 100_000_000_000 })),
+			env
+		)
+		expect(res.status).toBe(204)
+
+		const row = await env.DB.prepare("SELECT disk_used, disk_total, extra FROM metrics WHERE system_id = ?")
+			.bind(SYSTEM_ID)
+			.first<{ disk_used: number; disk_total: number; extra: string | null }>()
+		expect(row?.disk_used).toBe(45_000_000_000)
+		expect(row?.disk_total).toBe(100_000_000_000)
+		expect(row?.extra ?? "").not.toContain("disk_used")
+	})
+
 	it("accepts array payload (batch)", async () => {
 		const baseTs = Math.floor(Date.now() / 1000)
 		const batch = [

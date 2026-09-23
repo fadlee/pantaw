@@ -103,6 +103,8 @@ Agent mengirim payload ke `/api/v1/ingest` seperti ini:
   "mem_used": 4194304000,
   "mem_total": 8388608000,
   "disk": 45.0,
+  "disk_used": 45097156608,
+  "disk_total": 100215816192,
   "disk_read": 204800,
   "disk_write": 81920,
   "net_rx": 1048576,

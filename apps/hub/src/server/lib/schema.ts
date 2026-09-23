@@ -69,6 +69,29 @@ export const INITIAL_SCHEMA = [
 	"CREATE INDEX IF NOT EXISTS idx_agent_tokens_system ON agent_tokens (system_id)",
 ]
 
+/**
+ * Columns added by later migrations. INITIAL_SCHEMA mirrors 0001 exactly, so a
+ * database created by ensureSchema alone gets these added on top.
+ */
+export const ADDED_COLUMNS = [
+	{ table: "metrics", column: "disk_used", type: "INTEGER" }, // 0002_disk_bytes.sql
+	{ table: "metrics", column: "disk_total", type: "INTEGER" },
+] as const
+
+async function addMissingColumns(db: D1Database): Promise<void> {
+	const tables = [...new Set(ADDED_COLUMNS.map((c) => c.table))]
+	const existing = new Map<string, Set<string>>()
+	for (const table of tables) {
+		const { results } = await db
+			.prepare(`SELECT name FROM pragma_table_info('${table}')`)
+			.all<{ name: string }>()
+		existing.set(table, new Set(results.map((r) => r.name)))
+	}
+	const missing = ADDED_COLUMNS.filter((c) => !existing.get(c.table)?.has(c.column))
+	if (missing.length === 0) return
+	await db.batch(missing.map((c) => db.prepare(`ALTER TABLE ${c.table} ADD COLUMN ${c.column} ${c.type}`)))
+}
+
 export async function ensureSchema(db: D1Database): Promise<void> {
 	if (initialized) return
 
@@ -76,6 +99,7 @@ export async function ensureSchema(db: D1Database): Promise<void> {
 		initPromise = (async () => {
 			const statements = INITIAL_SCHEMA.map((sql) => db.prepare(sql))
 			await db.batch(statements)
+			await addMissingColumns(db)
 			initialized = true
 		})().catch((err) => {
 			initPromise = null
