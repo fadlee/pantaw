@@ -7,11 +7,7 @@
 	"bin": {
 		"pantaw": "./dist/cli.js"
 	},
-	"files": [
-		"dist",
-		"bundle",
-		"README.md"
-	],
+	"files": ["dist", "bundle", "README.md"],
 	"engines": {
 		"node": ">=20"
 	},

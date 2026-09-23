@@ -223,7 +223,15 @@ jobs:
         if: steps.version.outputs.published != 'true'
         run: bun run build
 
-      # prepack builds the CLI and copies the hub build into bundle/.
+      # Build before publishing, not only in prepack: npm validates `bin`
+      # before prepack runs and warns that dist/cli.js is missing.
+      - name: Build CLI
+        if: steps.version.outputs.published != 'true'
+        working-directory: ./packages/cli
+        run: |
+          bun run build
+          bun run bundle
+
       # Provenance is attached automatically under trusted publishing.
       - name: Publish
         if: steps.version.outputs.published != 'true'

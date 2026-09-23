@@ -124,6 +124,9 @@ async function main() {
 	const cliPkg = JSON.parse(readFileSync(cliPkgPath, "utf-8"))
 	cliPkg.version = targetVersion
 	writeFileSync(cliPkgPath, `${JSON.stringify(cliPkg, null, "\t")}\n`)
+	// JSON.stringify puts every array element on its own line; Biome (and CI)
+	// wants short arrays inline.
+	execSync(`bunx biome format --write ${pkgPath} ${cliPkgPath}`, { stdio: "ignore" })
 	console.log(`✔ Updated package.json and ${cliPkgPath} version to ${targetVersion}`)
 
 	// 8. Git commit & tag
