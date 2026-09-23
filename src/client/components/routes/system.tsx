@@ -1,5 +1,4 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { compareSemVer, parseSemVer } from "@/lib/utils"
 import type { GPUData } from "@/types"
 import { Trans } from "@lingui/react/macro"
 import { ContainerIcon, CpuIcon, HardDriveIcon, TerminalSquareIcon } from "lucide-react"
@@ -15,11 +14,8 @@ import { ContainerMemoryChart, MemoryChart, SwapChart } from "./system/charts/me
 import { BandwidthChart, ContainerNetworkChart } from "./system/charts/network-charts"
 import { BatteryChart, TemperatureChart } from "./system/charts/sensor-charts"
 import InfoBar from "./system/info-bar"
-import { LazyContainersTable, LazySmartTable, LazySystemdTable } from "./system/lazy-tables"
+import { LazyContainersTable, LazySystemdTable } from "./system/lazy-tables"
 import { useSystemData } from "./system/use-system-data"
-
-const SEMVER_0_14_0 = parseSemVer("0.14.0")
-const SEMVER_0_15_0 = parseSemVer("0.15.0")
 
 export default memo(function SystemDetail({ id }: { id: string }) {
 	const systemData = useSystemData(id)
@@ -59,7 +55,6 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 	}
 
 	const hasContainers = containerData.length > 0
-	const maybeHasSmartData = compareSemVer(chartData.agentVersion, SEMVER_0_15_0) >= 0
 	const hasContainersTable = hasContainers
 	const hasSystemd = system.info?.sv
 	const hasGpu = hasGpuData || hasGpuPowerData
@@ -140,8 +135,6 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 
 				<ExtraFsCharts systemData={systemData} />
 
-				{maybeHasSmartData && <LazySmartTable systemId={system.id} />}
-
 				{hasContainersTable && <LazyContainersTable systemId={system.id} />}
 
 				{hasSystemd && <LazySystemdTable systemId={system.id} />}
@@ -201,7 +194,6 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 								<RootDiskCharts systemData={systemData} />
 							</div>
 							<ExtraFsCharts systemData={systemData} />
-							{maybeHasSmartData && <LazySmartTable systemId={system.id} />}
 						</>
 					)}
 				</TabsContent>

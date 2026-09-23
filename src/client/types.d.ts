@@ -279,29 +279,6 @@ export interface AlertInfo {
 
 export type AlertMap = Record<string, Map<string, AlertRecord>>
 
-export interface SmartData {
-	mn?: string
-	sn?: string
-	fv?: string
-	c?: number
-	s?: string
-	dn?: string
-	dt?: string
-	t?: number
-	a?: SmartAttribute[]
-}
-
-export interface SmartAttribute {
-	id?: number
-	n: string
-	v: number
-	w?: number
-	t?: number
-	rv?: number
-	rs?: string
-	wf?: string
-}
-
 export interface SystemDetailsRecord extends BaseRecord {
 	system: string
 	hostname: string
@@ -314,23 +291,6 @@ export interface SystemDetailsRecord extends BaseRecord {
 	os_name: string
 	memory: number
 	podman: boolean
-}
-
-export interface SmartDeviceRecord extends BaseRecord {
-	id: string
-	system: string
-	name: string
-	model: string
-	state: string
-	capacity: number
-	temp: number
-	firmware: string
-	serial: string
-	type: string
-	hours: number
-	cycles: number
-	attributes: SmartAttribute[]
-	updated: string
 }
 
 export interface SystemdRecord extends BaseRecord {

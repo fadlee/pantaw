@@ -18,7 +18,6 @@ import {
 	BookIcon,
 	ContainerIcon,
 	FingerprintIcon,
-	HardDriveIcon,
 	MailIcon,
 	Server,
 	ServerIcon,
@@ -99,18 +98,6 @@ export default memo(function CommandPalette({
 							<span>
 								<Trans>All Containers</Trans>
 							</span>
-							<CommandShortcut>
-								<Trans>Page</Trans>
-							</CommandShortcut>
-						</CommandItem>
-						<CommandItem
-							onSelect={() => {
-								navigate(getPagePath($router, "smart"))
-								setOpen(false)
-							}}
-						>
-							<HardDriveIcon className="me-2 size-4" />
-							<span>S.M.A.R.T.</span>
 							<CommandShortcut>
 								<Trans>Page</Trans>
 							</CommandShortcut>

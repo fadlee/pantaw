@@ -27,7 +27,6 @@ import type { UpdateInfo } from "./types"
 const LoginPage = lazy(() => import("@/components/login/login.tsx"))
 const Home = lazy(() => import("@/components/routes/home.tsx"))
 const Containers = lazy(() => import("@/components/routes/containers.tsx"))
-const Smart = lazy(() => import("@/components/routes/smart.tsx"))
 const SystemDetail = lazy(() => import("@/components/routes/system.tsx"))
 const CopyToClipboardDialog = lazy(() => import("@/components/copy-to-clipboard.tsx"))
 
@@ -59,9 +58,6 @@ const App = memo(() => {
 	}
 	if (page.route === "containers") {
 		return <Containers />
-	}
-	if (page.route === "smart") {
-		return <Smart />
 	}
 	if (page.route === "settings") {
 		return <Settings />
