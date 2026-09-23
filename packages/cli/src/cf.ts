@@ -1,8 +1,4 @@
-/**
- * The handful of Cloudflare API calls the CLI makes itself. Deploys and
- * migrations go through wrangler; everything that has to be looked up or
- * created before wrangler runs lives here.
- */
+/** The Cloudflare API calls the CLI makes — all of them; there is no wrangler. */
 
 const API = "https://api.cloudflare.com/client/v4"
 
@@ -24,10 +20,10 @@ interface Envelope<T> {
 }
 
 async function cf<T>(token: string, path: string, init: RequestInit = {}): Promise<Envelope<T>> {
-	const res = await fetch(`${API}${path}`, {
-		...init,
-		headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
-	})
+	const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+	// JSON bodies are strings; FormData sets its own multipart boundary.
+	if (typeof init.body === "string") headers["Content-Type"] = "application/json"
+	const res = await fetch(`${API}${path}`, { ...init, headers })
 	const body = (await res.json().catch(() => null)) as Envelope<T> | null
 	if (!res.ok || !body?.success) {
 		const errors = body?.errors ?? []
@@ -122,6 +118,24 @@ export async function deleteWorker(token: string, accountId: string, name: strin
 	await cf(token, `/accounts/${accountId}/workers/scripts/${name}?force=true`, { method: "DELETE" })
 }
 
+/** Run SQL (several statements allowed) against a D1 database. */
+export async function d1Query<Row = Record<string, unknown>>(
+	token: string,
+	accountId: string,
+	databaseId: string,
+	sql: string
+): Promise<{ results: Row[] }[]> {
+	const body = await cf<{ results: Row[] }[]>(
+		token,
+		`/accounts/${accountId}/d1/database/${databaseId}/query`,
+		{
+			method: "POST",
+			body: JSON.stringify({ sql }),
+		}
+	)
+	return body.result
+}
+
 export interface D1 {
 	uuid: string
 	name: string
@@ -162,6 +176,85 @@ export async function createKv(token: string, accountId: string, title: string):
 
 export async function deleteKv(token: string, accountId: string, id: string): Promise<void> {
 	await cf(token, `/accounts/${accountId}/storage/kv/namespaces/${id}`, { method: "DELETE" })
+}
+
+export interface AssetManifestEntry {
+	hash: string
+	size: number
+}
+
+/**
+ * Start an assets upload. Cloudflare answers with the hashes it does not
+ * have yet, grouped in buckets; when it already has them all, the returned
+ * jwt is the completion token straight away.
+ */
+export async function startAssetsUpload(
+	token: string,
+	accountId: string,
+	worker: string,
+	manifest: Record<string, AssetManifestEntry>
+): Promise<{ jwt: string; buckets: string[][] }> {
+	const body = await cf<{ jwt: string; buckets?: string[][] }>(
+		token,
+		`/accounts/${accountId}/workers/scripts/${worker}/assets-upload-session`,
+		{ method: "POST", body: JSON.stringify({ manifest }) }
+	)
+	return { jwt: body.result.jwt, buckets: body.result.buckets ?? [] }
+}
+
+/** Upload one bucket of assets. Returns the completion token after the last one. */
+export async function uploadAssetsBucket(
+	uploadJwt: string,
+	accountId: string,
+	files: { hash: string; base64: string; contentType: string }[]
+): Promise<string | undefined> {
+	const form = new FormData()
+	for (const f of files) form.append(f.hash, new File([f.base64], f.hash, { type: f.contentType }))
+	const body = await cf<{ jwt?: string }>(
+		uploadJwt,
+		`/accounts/${accountId}/workers/assets/upload?base64=true`,
+		{
+			method: "POST",
+			body: form,
+		}
+	)
+	return body.result?.jwt
+}
+
+/** Upload the Worker script with its metadata (bindings, assets, compat settings). */
+export async function putWorkerScript(
+	token: string,
+	accountId: string,
+	worker: string,
+	metadata: unknown,
+	modules: { name: string; content: string }[]
+): Promise<void> {
+	const form = new FormData()
+	form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }))
+	for (const m of modules) {
+		form.append(m.name, new File([m.content], m.name, { type: "application/javascript+module" }))
+	}
+	await cf(token, `/accounts/${accountId}/workers/scripts/${worker}`, { method: "PUT", body: form })
+}
+
+export async function putCronTriggers(
+	token: string,
+	accountId: string,
+	worker: string,
+	crons: string[]
+): Promise<void> {
+	await cf(token, `/accounts/${accountId}/workers/scripts/${worker}/schedules`, {
+		method: "PUT",
+		body: JSON.stringify(crons.map((cron) => ({ cron }))),
+	})
+}
+
+/** Serve the Worker on <worker>.<subdomain>.workers.dev. */
+export async function enableWorkersDev(token: string, accountId: string, worker: string): Promise<void> {
+	await cf(token, `/accounts/${accountId}/workers/scripts/${worker}/subdomain`, {
+		method: "POST",
+		body: JSON.stringify({ enabled: true }),
+	})
 }
 
 /** What an existing Worker is already bound to, for taking it over as-is. */

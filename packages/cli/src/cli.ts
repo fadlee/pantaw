@@ -14,7 +14,7 @@ import { parseArgs } from "node:util"
 import * as p from "@clack/prompts"
 import pc from "picocolors"
 import pkg from "../package.json" with { type: "json" }
-import { type Bundle, buildWranglerConfig, locateBundle } from "./bundle"
+import { type Bundle, locateBundle } from "./bundle"
 import {
 	type Account,
 	CfError,
@@ -46,8 +46,8 @@ import {
 	saveConfig,
 	validateName,
 } from "./config"
+import { applyMigrations, deployWorker } from "./deploy"
 import { agentInstallCommand, createSystem, needsSetup, setupAdmin, waitForHealth } from "./hub"
-import { withWranglerConfig } from "./wrangler"
 
 const VERSION = pkg.version
 const HELP = `${pc.bold("pantaw")} v${VERSION} — deploy a Pantaw hub to Cloudflare
@@ -426,19 +426,16 @@ async function cmdDeploy(ctx: Ctx, flagName: string | undefined) {
 		cfg = await provision(token, account, name, url, bundle, existing)
 	}
 
-	const auth = { token, accountId: account.id }
-	await withWranglerConfig(buildWranglerConfig(bundle, cfg), auth, async (wrangler) => {
-		await step(
-			"Applying database migrations",
-			() => wrangler(["d1", "migrations", "apply", "DB", "--remote"]),
-			() => "Migrations up to date"
-		)
-		await step(
-			"Deploying the Worker",
-			() => wrangler(["deploy"]),
-			() => `Deployed ${cfg.url}`
-		)
-	})
+	await step(
+		"Applying database migrations",
+		() => applyMigrations(token, account.id, cfg.d1.id, bundle.migrations),
+		(applied) => (applied.length > 0 ? `Applied ${applied.join(", ")}` : "Migrations up to date")
+	)
+	await step(
+		"Deploying the Worker",
+		() => deployWorker(token, account.id, bundle, cfg),
+		(r) => `Deployed ${cfg.url} · ${r.uploaded} of ${r.assets} assets uploaded`
+	)
 	await step(
 		"Checking secrets",
 		() => ensureSecrets(token, account.id, name),

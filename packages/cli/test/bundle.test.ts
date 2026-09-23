@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { type Bundle, buildWranglerConfig, extractBase } from "../src/bundle"
+import { type Bundle, buildWorkerMetadata, extractBase } from "../src/bundle"
 import type { InstanceConfig } from "../src/config"
 
 // Shape of dist/pantaw/wrangler.json as `vite build` writes it.
@@ -30,8 +30,6 @@ describe("extractBase", () => {
 		expect(extractBase(built)).toEqual({
 			compatibility_date: "2025-01-01",
 			compatibility_flags: ["nodejs_compat"],
-			rules: [{ type: "ESModule", globs: ["**/*.js", "**/*.mjs"] }],
-			no_bundle: true,
 			triggers: { crons: ["*/2 * * * *", "0 2 * * *"] },
 			observability: { enabled: true },
 			not_found_handling: "single-page-application",
@@ -45,7 +43,7 @@ describe("extractBase", () => {
 	})
 })
 
-describe("buildWranglerConfig", () => {
+describe("buildWorkerMetadata", () => {
 	const bundle: Bundle = {
 		worker: "/pkg/bundle/worker/index.js",
 		client: "/pkg/bundle/client",
@@ -64,34 +62,35 @@ describe("buildWranglerConfig", () => {
 		created_at: "",
 		updated_at: "",
 	}
+	const meta = buildWorkerMetadata(bundle, cfg, "assets-jwt")
 
 	test("binds the instance's resources", () => {
-		const w = buildWranglerConfig(bundle, cfg)
-		expect(w.name).toBe("kantor")
-		expect(w.main).toBe("/pkg/bundle/worker/index.js")
-		expect(w.workers_dev).toBe(true)
-		expect(w.d1_databases).toEqual([
+		expect(meta.main_module).toBe("index.js")
+		expect(meta.compatibility_date).toBe("2025-01-01")
+		expect(meta.compatibility_flags).toEqual(["nodejs_compat"])
+		expect(meta.bindings).toEqual([
+			{ type: "assets", name: "ASSETS" },
+			{ type: "d1", name: "DB", id: "d1-uuid" },
+			{ type: "kv_namespace", name: "SESSION_KV", namespace_id: "kv-session" },
+			{ type: "kv_namespace", name: "RATE_KV", namespace_id: "kv-rate" },
 			{
-				binding: "DB",
-				database_name: "kantor",
-				database_id: "d1-uuid",
-				migrations_dir: "/pkg/bundle/migrations",
+				type: "ratelimit",
+				name: "INGEST_LIMITER",
+				namespace_id: "123456",
+				simple: { limit: 15, period: 60 },
 			},
+			{ type: "plain_text", name: "RETENTION_DAYS", text: "7" },
+			{ type: "plain_text", name: "TIMEOUT_SECONDS", text: "90" },
 		])
-		expect(w.kv_namespaces).toEqual([
-			{ binding: "SESSION_KV", id: "kv-session" },
-			{ binding: "RATE_KV", id: "kv-rate" },
-		])
-		expect(w.unsafe.bindings).toEqual([
-			{ name: "INGEST_LIMITER", type: "ratelimit", namespace_id: "123456", simple: { limit: 15, period: 60 } },
-		])
-		expect(w.assets).toEqual({
-			directory: "/pkg/bundle/client",
-			binding: "ASSETS",
-			not_found_handling: "single-page-application",
-		})
 	})
-	test("instance vars override defaults, new defaults still arrive", () => {
-		expect(buildWranglerConfig(bundle, cfg).vars).toEqual({ RETENTION_DAYS: "7", TIMEOUT_SECONDS: "90" })
+	test("keeps secrets across redeploys", () => {
+		expect(meta.keep_bindings).toEqual(["secret_text", "secret_key"])
+	})
+	test("attaches the assets upload and SPA fallback", () => {
+		expect(meta.assets).toEqual({
+			jwt: "assets-jwt",
+			config: { not_found_handling: "single-page-application" },
+		})
+		expect(meta.observability).toEqual({ enabled: true })
 	})
 })

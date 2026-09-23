@@ -17,15 +17,12 @@
 		"directory": "packages/cli"
 	},
 	"scripts": {
-		"build": "bun build ./src/cli.ts --outdir dist --target node --format esm --external wrangler",
+		"build": "bun build ./src/cli.ts --outdir dist --target node --format esm",
 		"bundle": "bun run scripts/bundle.ts",
 		"prepack": "bun run build && bun run bundle",
 		"dev": "bun run src/cli.ts",
 		"test": "bun test",
 		"typecheck": "tsc --noEmit"
-	},
-	"dependencies": {
-		"wrangler": "^4"
 	},
 	"devDependencies": {
 		"@clack/prompts": "^1",

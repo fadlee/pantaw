@@ -10,8 +10,6 @@ import type { InstanceConfig } from "./config"
 export interface BaseConfig {
 	compatibility_date: string
 	compatibility_flags: string[]
-	rules: unknown[]
-	no_bundle: boolean
 	triggers: { crons: string[] }
 	observability?: unknown
 	not_found_handling?: string
@@ -29,8 +27,6 @@ export interface Bundle {
 interface BuiltWranglerJson {
 	compatibility_date: string
 	compatibility_flags?: string[]
-	rules?: unknown[]
-	no_bundle?: boolean
 	triggers?: { crons?: string[] }
 	observability?: unknown
 	assets?: { not_found_handling?: string }
@@ -47,8 +43,6 @@ export function extractBase(built: BuiltWranglerJson): BaseConfig {
 	return {
 		compatibility_date: built.compatibility_date,
 		compatibility_flags: built.compatibility_flags ?? [],
-		rules: built.rules ?? [],
-		no_bundle: built.no_bundle ?? true,
 		triggers: { crons: built.triggers?.crons ?? [] },
 		observability: built.observability,
 		not_found_handling: built.assets?.not_found_handling,
@@ -86,48 +80,37 @@ export function locateBundle(): Bundle {
 	throw new Error("Worker bundle not found. In a repo checkout, run `bun run build` first.")
 }
 
-/** The wrangler config for one instance, with absolute paths into the bundle. */
-export function buildWranglerConfig(bundle: Bundle, cfg: InstanceConfig) {
+/**
+ * Metadata for the Workers script upload API: what wrangler would derive
+ * from a wrangler.json, with this instance's resource IDs bound in.
+ */
+export function buildWorkerMetadata(bundle: Bundle, cfg: InstanceConfig, assetsJwt: string) {
 	const { base } = bundle
+	const vars = { ...base.vars, ...cfg.vars }
 	return {
-		name: cfg.name,
-		main: bundle.worker,
+		main_module: "index.js",
 		compatibility_date: base.compatibility_date,
 		compatibility_flags: base.compatibility_flags,
-		rules: base.rules,
-		no_bundle: base.no_bundle,
-		workers_dev: true,
-		assets: {
-			directory: bundle.client,
-			binding: "ASSETS",
-			...(base.not_found_handling ? { not_found_handling: base.not_found_handling } : {}),
-		},
-		triggers: base.triggers,
-		...(base.observability ? { observability: base.observability } : {}),
-		vars: { ...base.vars, ...cfg.vars },
-		d1_databases: [
+		bindings: [
+			{ type: "assets", name: "ASSETS" },
+			{ type: "d1", name: "DB", id: cfg.d1.id },
+			{ type: "kv_namespace", name: "SESSION_KV", namespace_id: cfg.kv.session },
+			{ type: "kv_namespace", name: "RATE_KV", namespace_id: cfg.kv.rate },
 			{
-				binding: "DB",
-				database_name: cfg.d1.name,
-				database_id: cfg.d1.id,
-				migrations_dir: bundle.migrations,
+				type: "ratelimit",
+				name: "INGEST_LIMITER",
+				namespace_id: cfg.ratelimit_namespace_id,
+				simple: base.ingest_limit,
 			},
+			...Object.entries(vars).map(([name, text]) => ({ type: "plain_text", name, text })),
 		],
-		kv_namespaces: [
-			{ binding: "SESSION_KV", id: cfg.kv.session },
-			{ binding: "RATE_KV", id: cfg.kv.rate },
-		],
-		// unsafe.bindings rather than `ratelimits`: older wrangler 4 releases drop
-		// the latter with only a warning, deploying without the limiter.
-		unsafe: {
-			bindings: [
-				{
-					name: "INGEST_LIMITER",
-					type: "ratelimit",
-					namespace_id: cfg.ratelimit_namespace_id,
-					simple: base.ingest_limit,
-				},
-			],
+		// A script upload replaces every binding it does not list; secrets are
+		// set separately and must survive redeploys.
+		keep_bindings: ["secret_text", "secret_key"],
+		assets: {
+			jwt: assetsJwt,
+			...(base.not_found_handling ? { config: { not_found_handling: base.not_found_handling } } : {}),
 		},
+		...(base.observability ? { observability: base.observability } : {}),
 	}
 }
