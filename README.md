@@ -88,16 +88,18 @@ bun install
 
 #### 2. Provision Cloudflare Resources
 
-Create the D1 database and KV namespaces:
+Wrangler reads `apps/hub/wrangler.toml`, so run these from `apps/hub`. Create the D1 database and KV namespaces:
 
 ```bash
+cd apps/hub
+
 # Create D1 Database
 bunx wrangler d1 create pantaw
 
 # Create KV Namespaces
 bunx wrangler kv namespace create RATE_KV
 
-Update your `wrangler.toml` with the generated database ID and KV namespace IDs.
+Update `apps/hub/wrangler.toml` with the generated database ID and KV namespace IDs.
 
 #### 3. Configure Secrets
 
@@ -108,7 +110,7 @@ bunx wrangler secret put JWT_SECRET_V1
 bunx wrangler secret put JWT_KID_CURRENT # value: v1
 ```
 
-For local development, create a `.dev.vars` file:
+For local development, create `apps/hub/.dev.vars` (see `.dev.vars.example`):
 
 ```ini
 JWT_SECRET_V1="your-local-dev-secret-at-least-32-chars-long"
@@ -116,6 +118,8 @@ JWT_KID_CURRENT="v1"
 ```
 
 #### 4. Build and Deploy
+
+From the repo root:
 
 ```bash
 # Build SPA frontend and worker bundle
@@ -220,6 +224,19 @@ Pantaw is engineered to stay well within Cloudflare Workers Free Tier limits:
 
 ---
 
+## Repository Layout
+
+```
+apps/hub/        Cloudflare Worker (Hono API) + React SPA, D1 migrations, tests
+apps/agent/      Go agent (built with Go, outside the Bun workspace)
+packages/cli/    `pantaw` npm CLI that deploys and upgrades a hub
+scripts/         repo tooling (release)
+docs/            deploy notes; docs/design holds the RFC and improvement plan
+install-agent.sh agent installer (kept at the root: its raw URL is published)
+```
+
+Root scripts run across workspaces (`test`, `typecheck`) or forward to the hub (`dev`, `build`, `deploy`, `db:*`, `i18n:*`).
+
 ## Development & Testing
 
 ```bash
@@ -236,7 +253,7 @@ bun run check
 bun run test
 
 # Build and verify agent
-cd agent && go test ./... && go build ./...
+cd apps/agent && go test ./... && go build ./...
 ```
 
 ---
@@ -246,7 +263,7 @@ cd agent && go test ./... && go build ./...
 Pantaw stands on the shoulders of **[Beszel](https://github.com/henrygd/beszel)** by [henrygd](https://github.com/henrygd).
 
 - **Architecture:** Pantaw's agent–hub model is inspired by Beszel, reimplemented for the Cloudflare edge runtime (HTTPS ingest instead of an SSH tunnel, D1 instead of PocketBase). Pantaw is not a drop-in fork and its wire protocol is not Beszel-compatible.
-- **Dashboard UI:** the React SPA is forked from [Beszel's web UI](https://github.com/henrygd/beszel/tree/main/internal/site), with the PocketBase layer replaced by Pantaw's Hono API. The translations in `src/client/locales` come from Beszel's community translators.
+- **Dashboard UI:** the React SPA is forked from [Beszel's web UI](https://github.com/henrygd/beszel/tree/main/internal/site), with the PocketBase layer replaced by Pantaw's Hono API. The translations in `apps/hub/src/client/locales` come from Beszel's community translators.
 
 Beszel is released under the MIT License, Copyright (c) 2024 henrygd.
 

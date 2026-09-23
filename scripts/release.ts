@@ -26,8 +26,8 @@ async function main() {
 
 	console.log("\n🚀 \x1b[1m\x1b[36mPantaw Release & Versioning Helper\x1b[0m\n")
 
-	// 1. Read package.json
-	const pkgPath = "./package.json"
+	// 1. Read the hub's package.json
+	const pkgPath = "./apps/hub/package.json"
 	const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
 	const currentPkgVersion = pkg.version || "0.0.1"
 
@@ -116,8 +116,8 @@ async function main() {
 		process.exit(0)
 	}
 
-	// 7. Update package.json, and the CLI's: it ships this release's hub build,
-	// so its version has to match the tag (release.yml checks).
+	// 7. Update the hub's package.json, and the CLI's: it ships this release's
+	// hub build, so its version has to match the tag (release.yml checks).
 	pkg.version = targetVersion
 	writeFileSync(pkgPath, `${JSON.stringify(pkg, null, "\t")}\n`)
 	const cliPkgPath = "./packages/cli/package.json"
@@ -127,7 +127,7 @@ async function main() {
 	// JSON.stringify puts every array element on its own line; Biome (and CI)
 	// wants short arrays inline.
 	execSync(`bunx biome format --write ${pkgPath} ${cliPkgPath}`, { stdio: "ignore" })
-	console.log(`✔ Updated package.json and ${cliPkgPath} version to ${targetVersion}`)
+	console.log(`✔ Updated ${pkgPath} and ${cliPkgPath} version to ${targetVersion}`)
 
 	// 8. Git commit & tag
 	try {

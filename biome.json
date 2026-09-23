@@ -5,13 +5,13 @@
 	},
 	"files": {
 		"ignore": [
-			"dist",
+			"apps/hub/dist",
+			"apps/hub/.wrangler",
+			"apps/hub/src/client/locales",
+			"apps/hub/src/client/index.css",
 			"packages/*/dist",
 			"packages/*/bundle",
-			".wrangler",
-			"node_modules",
-			"src/client/locales",
-			"src/client/index.css"
+			"node_modules"
 		]
 	},
 	"formatter": {

@@ -36,18 +36,18 @@ export DOCKER=true
 ## Build
 
 ```bash
-cd agent
+cd apps/agent
 make build
 ```
 
 Cross-compile semua target umum:
 
 ```bash
-cd agent
+cd apps/agent
 make build-all
 ```
 
-Output ada di folder `agent/dist/`.
+Output ada di folder `apps/agent/dist/`.
 
 ## Systemd example
 

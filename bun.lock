@@ -4,6 +4,14 @@
   "workspaces": {
     "": {
       "name": "pantaw",
+      "devDependencies": {
+        "@biomejs/biome": "^1.9.4",
+        "@types/bun": "latest",
+      },
+    },
+    "apps/hub": {
+      "name": "@pantaw/hub",
+      "version": "0.4.3",
       "dependencies": {
         "@henrygd/queue": "^1.0.7",
         "@henrygd/semaphore": "^0.0.2",
@@ -48,7 +56,6 @@
         "valibot": "^1.0.0-beta.9",
       },
       "devDependencies": {
-        "@biomejs/biome": "^1.9.4",
         "@cloudflare/vite-plugin": "^0.1.16",
         "@cloudflare/vitest-pool-workers": "^0.8.0",
         "@cloudflare/workers-types": "^4.20241224.0",
@@ -331,6 +338,8 @@
     "@nanostores/react": ["@nanostores/react@0.7.3", "", { "peerDependencies": { "nanostores": "^0.9.0 || ^0.10.0 || ^0.11.0", "react": ">=18.0.0" } }, "sha512-/XuLAMENRu/Q71biW4AZ4qmU070vkZgiQ28gaTSNRPm2SZF5zGAR81zPE1MaMB4SeOp6ZTst92NBaG75XSspNg=="],
 
     "@nanostores/router": ["@nanostores/router@0.11.0", "", { "peerDependencies": { "nanostores": "^0.9.0" } }, "sha512-QlcneDqXVIsQL3agOS59d9gJQ/9M3qyVOWVttARL5Xvpmovtq91oOYcQxKbLq9i7iitGs5yDJmabe/O3QjWddQ=="],
+
+    "@pantaw/hub": ["@pantaw/hub@workspace:apps/hub"],
 
     "@poppinss/colors": ["@poppinss/colors@4.1.6", "", { "dependencies": { "kleur": "^4.1.5" } }, "sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg=="],
 

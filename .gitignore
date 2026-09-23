@@ -42,6 +42,3 @@ coverage/
 # TypeScript build info
 *.tsbuildinfo
 
-# Go agent
-agent/agent
-agent/dist/

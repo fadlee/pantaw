@@ -10,7 +10,7 @@ on:
 
 jobs:
   server-and-client:
-    name: Server & Client (Lint, Typecheck, Test)
+    name: Hub & CLI (Lint, Typecheck, Test)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -28,8 +28,8 @@ jobs:
         run: |
           bun run i18n:extract
           bun run i18n:compile
-          git diff --exit-code -- src/client/locales || {
-            echo "::error::Run 'bun run i18n:extract && bun run i18n:compile' and commit src/client/locales"
+          git diff --exit-code -- apps/hub/src/client/locales || {
+            echo "::error::Run 'bun run i18n:extract && bun run i18n:compile' and commit apps/hub/src/client/locales"
             exit 1
           }
 
@@ -45,12 +45,9 @@ jobs:
       - name: Build
         run: bun run build
 
-      - name: CLI (typecheck, test, pack)
+      - name: CLI pack
         working-directory: ./packages/cli
-        run: |
-          bun run typecheck
-          bun test
-          npm pack --dry-run
+        run: npm pack --dry-run
   agent:
     name: Agent (Vet, Test, Build)
     runs-on: ubuntu-latest
@@ -62,16 +59,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
-          cache-dependency-path: agent/go.sum
+          cache-dependency-path: apps/agent/go.sum
 
       - name: Go Vet
-        working-directory: ./agent
+        working-directory: ./apps/agent
         run: go vet ./...
 
       - name: Go Test
-        working-directory: ./agent
+        working-directory: ./apps/agent
         run: go test ./...
 
       - name: Go Build
-        working-directory: ./agent
+        working-directory: ./apps/agent
         run: go build ./...

@@ -9,8 +9,6 @@ export default defineWorkersConfig(async () => {
 	const migrations = await readD1Migrations("./migrations")
 	return {
 		test: {
-			// packages/cli runs under bun test, outside the Workers runtime.
-			exclude: ["**/node_modules/**", "packages/**"],
 			setupFiles: ["./tests/apply-migrations.ts"],
 			poolOptions: {
 				workers: {
