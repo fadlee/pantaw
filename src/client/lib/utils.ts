@@ -303,7 +303,7 @@ export const chartMargin = { top: 12, right: 5 }
  * const hostname = getHostDisplayValue(system) // hostname will be "pantaw.sock"
  */
 export const getHostDisplayValue = (system: SystemRecord): string =>
-	system.host.slice(system.host.lastIndexOf("/") + 1)
+	system.host ? system.host.slice(system.host.lastIndexOf("/") + 1) : ""
 
 // export function formatUptimeString(uptimeSeconds: number): string {
 // 	if (!uptimeSeconds || isNaN(uptimeSeconds)) return ""

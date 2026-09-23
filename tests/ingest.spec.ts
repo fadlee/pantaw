@@ -186,6 +186,63 @@ describe("/api/v1/ingest", () => {
 		expect(parsed.cpu).toBe(77.7)
 	})
 
+	it("automatically updates system host from cf-connecting-ip when empty", async () => {
+		await env.DB.prepare("UPDATE systems SET host = '' WHERE id = ?").bind(SYSTEM_ID).run()
+
+		const req = new Request("http://test/api/v1/ingest", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${currentToken}`,
+				"CF-Connecting-IP": "203.0.113.195",
+			},
+			body: JSON.stringify(validPayload()),
+		})
+		const res = await worker.fetch(req, env)
+		expect(res.status).toBe(204)
+
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?").bind(SYSTEM_ID).first<{ host: string }>()
+		expect(row?.host).toBe("203.0.113.195")
+	})
+
+	it("does not overwrite system host if host is already set", async () => {
+		await env.DB.prepare("UPDATE systems SET host = '10.0.0.5' WHERE id = ?").bind(SYSTEM_ID).run()
+
+		const req = new Request("http://test/api/v1/ingest", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${currentToken}`,
+				"CF-Connecting-IP": "203.0.113.195",
+			},
+			body: JSON.stringify(validPayload()),
+		})
+		const res = await worker.fetch(req, env)
+		expect(res.status).toBe(204)
+
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?").bind(SYSTEM_ID).first<{ host: string }>()
+		expect(row?.host).toBe("10.0.0.5")
+	})
+
+	it("extracts IP from x-real-ip or x-forwarded-for fallback", async () => {
+		await env.DB.prepare("UPDATE systems SET host = '' WHERE id = ?").bind(SYSTEM_ID).run()
+
+		const req = new Request("http://test/api/v1/ingest", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${currentToken}`,
+				"X-Forwarded-For": "198.51.100.22, 10.0.0.1",
+			},
+			body: JSON.stringify(validPayload()),
+		})
+		const res = await worker.fetch(req, env)
+		expect(res.status).toBe(204)
+
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ?").bind(SYSTEM_ID).first<{ host: string }>()
+		expect(row?.host).toBe("198.51.100.22")
+	})
+
 	it("returns 429 when exceeding rate limit (per-token bucket)", async () => {
 		// Limit prod = 3/menit per token. Kirim 4 request berturut-turut
 		// dengan ts berbeda agar tidak kena idempotensi.

@@ -84,6 +84,7 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		const id = crypto.randomUUID()
 		const now = Math.floor(Date.now() / 1000)
 		const timeoutSeconds = body.timeout_seconds ?? 90
+		const host = body.host ?? ""
 		const rawToken = generateRawToken()
 		const tokenHash = await sha256Hex(rawToken)
 		const tokenId = crypto.randomUUID()
@@ -92,7 +93,7 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 				c.env.DB.prepare(
 					`INSERT INTO systems (id, name, host, agent_token_hash, timeout_seconds, created_at, updated_at)
 					 VALUES (?, ?, ?, ?, ?, ?, ?)`
-				).bind(id, body.name, body.host, tokenHash, timeoutSeconds, now, now),
+				).bind(id, body.name, host, tokenHash, timeoutSeconds, now, now),
 				c.env.DB.prepare(
 					`INSERT INTO agent_tokens (id, system_id, token_hash, label, created_at)
 					 VALUES (?, ?, ?, ?, ?)`
@@ -108,7 +109,7 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 			{
 				id,
 				name: body.name,
-				host: body.host,
+				host,
 				timeout_seconds: timeoutSeconds,
 				status: "unknown" as const,
 				last_seen: null,

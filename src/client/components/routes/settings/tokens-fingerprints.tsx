@@ -114,7 +114,9 @@ export default function SystemsSettings() {
 						>
 							<div className="min-w-0">
 								<p className="font-medium truncate">{sys.name}</p>
-								<p className="text-xs text-muted-foreground font-mono truncate">{sys.host}</p>
+								<p className="text-xs text-muted-foreground font-mono truncate">
+									{sys.host || <span className="italic opacity-80"><Trans>Waiting for connection…</Trans></span>}
+								</p>
 							</div>
 							<div className="flex items-center gap-2 shrink-0">
 								<Button

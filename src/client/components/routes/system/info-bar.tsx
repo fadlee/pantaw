@@ -100,14 +100,15 @@ export default function InfoBar({
 				label: osName ? kernel : undefined,
 			},
 		}
+		const hostDisplay = getHostDisplayValue(system)
 		const info = [
-			{ value: getHostDisplayValue(system), Icon: GlobeIcon },
+			{ value: hostDisplay || t`Pending connection…`, Icon: GlobeIcon },
 			{
 				value: hostname,
 				Icon: MonitorIcon,
 				label: "Hostname",
-				// hide if hostname is same as host or name
-				hide: hostname === system.host || hostname === system.name,
+				// hide if hostname is same as host or name, or if not provided
+				hide: !hostname || hostname === system.host || hostname === system.name,
 			},
 			{
 				value: secondsToUptimeString(system.info?.u ?? 0),

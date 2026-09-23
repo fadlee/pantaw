@@ -75,7 +75,7 @@ export type SetupBody = v.InferOutput<typeof SetupBodySchema>
  */
 export const CreateSystemBodySchema = v.object({
 	name: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
-	host: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
+	host: v.optional(v.pipe(v.string(), v.maxLength(255)), ""),
 	timeout_seconds: v.optional(v.pipe(v.number(), v.integer(), v.minValue(30), v.maxValue(3600))),
 })
 

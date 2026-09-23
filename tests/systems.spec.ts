@@ -110,6 +110,31 @@ describe("/api/v1/systems", () => {
 		expect(row?.token_hash).toBe(expectedHash)
 	})
 
+	it("admin can create a system without specifying host", async () => {
+		const cookie = await loginAs(ADMIN)
+		const res = await worker.fetch(
+			jsonRequest("http://test/api/v1/systems", "POST", cookie, {
+				name: "server-no-host",
+			}),
+			env
+		)
+		expect(res.status).toBe(201)
+		const body = (await res.json()) as {
+			id: string
+			name: string
+			host: string
+			status: string
+		}
+		expect(body.name).toBe("server-no-host")
+		expect(body.host).toBe("")
+		expect(body.status).toBe("unknown")
+
+		const row = await env.DB.prepare("SELECT host FROM systems WHERE id = ? LIMIT 1")
+			.bind(body.id)
+			.first<{ host: string }>()
+		expect(row?.host).toBe("")
+	})
+
 	it("regular user cannot create system", async () => {
 		const cookie = await loginAs(REGULAR)
 		const res = await worker.fetch(
