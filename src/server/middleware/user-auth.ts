@@ -9,6 +9,7 @@ export type UserAuthVars = {
 	userId: string
 	userEmail: string
 	userRole: "admin" | "user"
+	userSystemIds: string[]
 	jti: string
 }
 
@@ -35,6 +36,8 @@ export const userAuth = createMiddleware<{ Bindings: Env; Variables: UserAuthVar
 	c.set("userId", result.payload.sub)
 	c.set("userEmail", result.payload.email)
 	c.set("userRole", result.payload.role)
+	c.set("userSystemIds", result.payload.system_ids ?? [])
+	// ponytail: system_ids embedded in JWT can become stale if permissions change before session expiry (24h). Upgrade to DB lookup or token versioning when full user management is implemented.
 	c.set("jti", result.payload.jti)
 	await next()
 })
@@ -48,3 +51,12 @@ export const requireAdmin = createMiddleware<{ Bindings: Env; Variables: UserAut
 	}
 	await next()
 })
+
+export function scopeSystems(c: { get: <K extends keyof UserAuthVars>(k: K) => UserAuthVars[K] }): {
+	isAdmin: boolean
+	allowedIds: string[]
+} {
+	const isAdmin = c.get("userRole") === "admin"
+	const allowedIds = c.get("userSystemIds") || []
+	return { isAdmin, allowedIds }
+}

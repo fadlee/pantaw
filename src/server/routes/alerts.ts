@@ -3,8 +3,7 @@ import { Hono } from "hono"
 import { CreateAlertBodySchema, UpdateAlertBodySchema } from "../../shared/schemas"
 import type { Env } from "../index"
 import type { UserAuthVars } from "../middleware/user-auth"
-import { requireAdmin, userAuth } from "../middleware/user-auth"
-
+import { scopeSystems, userAuth } from "../middleware/user-auth"
 type AlertRow = {
 	id: string
 	system_id: string
@@ -35,16 +34,42 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 	.use("*", userAuth)
 	.get("/", async (c) => {
 		const systemId = c.req.query("system_id")
-		const sql = systemId
-			? "SELECT * FROM alerts WHERE system_id = ? ORDER BY id"
-			: "SELECT * FROM alerts ORDER BY system_id, id"
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		const boundedIds = allowedIds.slice(0, 100)
+
+		if (!isAdmin && boundedIds.length === 0) {
+			return c.json([])
+		}
+
+		if (systemId) {
+			if (!isAdmin && !allowedIds.includes(systemId)) {
+				return c.json([])
+			}
+			const stmt = c.env.DB.prepare("SELECT * FROM alerts WHERE system_id = ? ORDER BY id").bind(systemId)
+			const { results } = await stmt.all<AlertRow>()
+			return c.json(results.map(rowToResponse))
+		}
+
+		let sql = "SELECT * FROM alerts"
+		const params: unknown[] = []
+		if (!isAdmin) {
+			const placeholders = boundedIds.map(() => "?").join(", ")
+			sql += ` WHERE system_id IN (${placeholders})`
+			params.push(...boundedIds)
+		}
+		sql += " ORDER BY system_id, id"
+
 		const stmt = c.env.DB.prepare(sql)
-		const bound = systemId ? stmt.bind(systemId) : stmt
+		const bound = params.length > 0 ? stmt.bind(...params) : stmt
 		const { results } = await bound.all<AlertRow>()
 		return c.json(results.map(rowToResponse))
 	})
-	.post("/", requireAdmin, vValidator("json", CreateAlertBodySchema), async (c) => {
+	.post("/", vValidator("json", CreateAlertBodySchema), async (c) => {
 		const body = c.req.valid("json")
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		if (!isAdmin && !allowedIds.includes(body.system_id)) {
+			return c.json({ error: "system_not_found" }, 404)
+		}
 		const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(body.system_id).first()
 		if (!exists) return c.json({ error: "system_not_found" }, 404)
 		const id = crypto.randomUUID()
@@ -69,8 +94,16 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		if (!row) return c.json({ error: "create_failed" }, 500)
 		return c.json(rowToResponse(row), 201)
 	})
-	.put("/:id", requireAdmin, vValidator("json", UpdateAlertBodySchema), async (c) => {
+	.put("/:id", vValidator("json", UpdateAlertBodySchema), async (c) => {
 		const id = c.req.param("id")
+		const existing = await c.env.DB.prepare("SELECT system_id FROM alerts WHERE id = ?")
+			.bind(id)
+			.first<{ system_id: string }>()
+		if (!existing) return c.json({ error: "not_found" }, 404)
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		if (!isAdmin && !allowedIds.includes(existing.system_id)) {
+			return c.json({ error: "not_found" }, 404)
+		}
 		const body = c.req.valid("json")
 		const updates: string[] = []
 		const values: (string | number | null)[] = []
@@ -108,8 +141,16 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		if (!row) return c.json({ error: "not_found" }, 404)
 		return c.json(rowToResponse(row))
 	})
-	.delete("/:id", requireAdmin, async (c) => {
+	.delete("/:id", async (c) => {
 		const id = c.req.param("id")
+		const existing = await c.env.DB.prepare("SELECT system_id FROM alerts WHERE id = ?")
+			.bind(id)
+			.first<{ system_id: string }>()
+		if (!existing) return c.json({ error: "not_found" }, 404)
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		if (!isAdmin && !allowedIds.includes(existing.system_id)) {
+			return c.json({ error: "not_found" }, 404)
+		}
 		const result = await c.env.DB.prepare("DELETE FROM alerts WHERE id = ?").bind(id).run()
 		if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404)
 		return c.body(null, 204)

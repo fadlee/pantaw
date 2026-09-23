@@ -8,6 +8,18 @@ import { defaultKidResolver, signJwt } from "../lib/jwt"
 import { hashPassword, verifyPassword } from "../lib/password"
 import type { UserAuthVars } from "../middleware/user-auth"
 import { SESSION_COOKIE, userAuth } from "../middleware/user-auth"
+function parseSystemIds(raw: string | null | undefined): string[] {
+	if (!raw) return []
+	try {
+		const parsed = JSON.parse(raw)
+		if (Array.isArray(parsed)) {
+			return parsed.filter((id): id is string => typeof id === "string")
+		}
+		return []
+	} catch {
+		return []
+	}
+}
 const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 	.get("/setup-status", async (c) => {
 		const n = await userCount(c.env)
@@ -33,7 +45,7 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		}
 
 		const token = await signJwt(
-			{ sub: id, email: normalizedEmail, role: "admin" },
+			{ sub: id, email: normalizedEmail, role: "admin", system_ids: [] },
 			{
 				currentKid: c.env.JWT_KID_CURRENT,
 				resolveSecret: defaultKidResolver(c.env as unknown as Record<string, unknown>),
@@ -56,7 +68,7 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		}
 
 		const user = await c.env.DB.prepare(
-			"SELECT id, email, password_hash, role FROM users WHERE email = ? LIMIT 1"
+			"SELECT id, email, password_hash, role, system_ids FROM users WHERE email = ? LIMIT 1"
 		)
 			.bind(normalizedEmail)
 			.first<UserRow>()
@@ -79,8 +91,9 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 
 		await clearLoginThrottle(c.env, normalizedEmail)
 
+		const systemIds = parseSystemIds(user.system_ids)
 		const token = await signJwt(
-			{ sub: user.id, email: user.email, role: user.role },
+			{ sub: user.id, email: user.email, role: user.role, system_ids: systemIds },
 			{
 				currentKid: c.env.JWT_KID_CURRENT,
 				resolveSecret: defaultKidResolver(c.env as unknown as Record<string, unknown>),
@@ -101,6 +114,7 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 			id: c.get("userId"),
 			email: c.get("userEmail"),
 			role: c.get("userRole"),
+			system_ids: c.get("userSystemIds"),
 		})
 	})
 
@@ -177,6 +191,7 @@ type UserRow = {
 	email: string
 	password_hash: string
 	role: "admin" | "user"
+	system_ids: string
 }
 
 async function userCount(env: Env): Promise<number> {

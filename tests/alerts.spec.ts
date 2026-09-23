@@ -130,7 +130,7 @@ describe("/api/v1/alerts", () => {
 		expect(body.webhook_url).toBeNull()
 	})
 
-	it("regular user cannot create alert", async () => {
+	it("regular user without system access cannot create alert", async () => {
 		const cookie = await loginAs(REGULAR)
 		const sysId = await createSystem()
 		const res = await worker.fetch(
@@ -142,7 +142,7 @@ describe("/api/v1/alerts", () => {
 			}),
 			env
 		)
-		expect(res.status).toBe(403)
+		expect(res.status).toBe(404)
 	})
 
 	it("rejects alert for unknown system", async () => {
@@ -296,7 +296,7 @@ describe("/api/v1/alerts", () => {
 		expect(((await list.json()) as AlertResp[]).length).toBe(0)
 	})
 
-	it("regular user cannot delete alert", async () => {
+	it("regular user without system access cannot delete alert", async () => {
 		const adminCookie = await loginAs(ADMIN)
 		const sysId = await createSystem()
 		const create = await worker.fetch(
@@ -312,7 +312,7 @@ describe("/api/v1/alerts", () => {
 
 		const userCookie = await loginAs(REGULAR)
 		const res = await worker.fetch(jsonRequest(`http://test/api/v1/alerts/${id}`, "DELETE", userCookie), env)
-		expect(res.status).toBe(403)
+		expect(res.status).toBe(404)
 	})
 
 	it("alerts cascade-deleted when system is deleted", async () => {
@@ -332,5 +332,50 @@ describe("/api/v1/alerts", () => {
 			.bind(sysId)
 			.first<{ n: number }>()
 		expect(left?.n).toBe(0)
+	})
+
+	it("filters alerts by allowed system_ids for non-admin user", async () => {
+		const adminCookie = await loginAs(ADMIN)
+		const sys1 = await createSystem("sys-alert-1")
+		const sys2 = await createSystem("sys-alert-2")
+
+		await worker.fetch(
+			jsonRequest("http://test/api/v1/alerts", "POST", adminCookie, {
+				system_id: sys1,
+				metric: "cpu",
+				operator: "gt",
+				threshold: 80,
+			}),
+			env
+		)
+		await worker.fetch(
+			jsonRequest("http://test/api/v1/alerts", "POST", adminCookie, {
+				system_id: sys2,
+				metric: "mem",
+				operator: "gt",
+				threshold: 90,
+			}),
+			env
+		)
+
+		const SCOPED = {
+			id: "user_scoped_alert",
+			email: "scoped_alert@example.com",
+			password: "password12345",
+		}
+		const now = Math.floor(Date.now() / 1000)
+		await env.DB.prepare(
+			`INSERT INTO users (id, email, password_hash, role, created_at, system_ids)
+			 VALUES (?, ?, ?, 'user', ?, ?)`
+		)
+			.bind(SCOPED.id, SCOPED.email, await hashPassword(SCOPED.password), now, JSON.stringify([sys1]))
+			.run()
+
+		const scopedCookie = await loginAs(SCOPED)
+		const res = await worker.fetch(jsonRequest("http://test/api/v1/alerts", "GET", scopedCookie), env)
+		expect(res.status).toBe(200)
+		const alerts = (await res.json()) as AlertResp[]
+		expect(alerts).toHaveLength(1)
+		expect(alerts[0]?.system_id).toBe(sys1)
 	})
 })

@@ -16,14 +16,14 @@ const REGULAR = {
 	password: "user-pass-very-strong",
 }
 
-async function createUser(opts: typeof ADMIN, role: "admin" | "user") {
+async function createUser(opts: typeof ADMIN, role: "admin" | "user", systemIds: string[] = []) {
 	const hash = await hashPassword(opts.password)
 	const now = Math.floor(Date.now() / 1000)
 	await env.DB.prepare(
 		`INSERT OR REPLACE INTO users (id, email, password_hash, role, created_at, system_ids)
 		 VALUES (?, ?, ?, ?, ?, ?)`
 	)
-		.bind(opts.id, opts.email, hash, role, now, "[]")
+		.bind(opts.id, opts.email, hash, role, now, JSON.stringify(systemIds))
 		.run()
 }
 
@@ -337,5 +337,149 @@ describe("/api/v1/systems", () => {
 			env
 		)
 		expect(res.status).toBe(400)
+	})
+
+	it("enforces per-user system scoping for non-admin users", async () => {
+		const adminCookie = await loginAs(ADMIN)
+		// Create 2 systems
+		const r1 = await worker.fetch(
+			jsonRequest("http://test/api/v1/systems", "POST", adminCookie, { name: "sys-1", host: "h1" }),
+			env
+		)
+		const { id: id1 } = (await r1.json()) as { id: string }
+		const r2 = await worker.fetch(
+			jsonRequest("http://test/api/v1/systems", "POST", adminCookie, { name: "sys-2", host: "h2" }),
+			env
+		)
+		const { id: id2 } = (await r2.json()) as { id: string }
+
+		// User only allowed to access sys-1
+		const SCOPED_USER = {
+			id: "user_scoped",
+			email: "scoped@example.com",
+			password: "pass-scoped-user",
+		}
+		await createUser(SCOPED_USER, "user", [id1])
+		const scopedCookie = await loginAs(SCOPED_USER)
+
+		// GET / returns only sys-1
+		const listRes = await worker.fetch(jsonRequest("http://test/api/v1/systems", "GET", scopedCookie), env)
+		expect(listRes.status).toBe(200)
+		const list = (await listRes.json()) as { id: string }[]
+		expect(list.map((s) => s.id)).toEqual([id1])
+
+		// GET /:id for allowed system returns 200
+		const get1Res = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id1}`, "GET", scopedCookie),
+			env
+		)
+		expect(get1Res.status).toBe(200)
+
+		// GET /:id for unallowed system returns 404
+		const get2Res = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id2}`, "GET", scopedCookie),
+			env
+		)
+		expect(get2Res.status).toBe(404)
+
+		// GET /:id/metrics for allowed system returns 200
+		const m1Res = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id1}/metrics`, "GET", scopedCookie),
+			env
+		)
+		expect(m1Res.status).toBe(200)
+
+		// GET /:id/metrics for unallowed system returns 404
+		const m2Res = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id2}/metrics`, "GET", scopedCookie),
+			env
+		)
+		expect(m2Res.status).toBe(404)
+	})
+
+	it("lists, deletes, and rotates tokens with revoke_others option", async () => {
+		const adminCookie = await loginAs(ADMIN)
+		const createRes = await worker.fetch(
+			jsonRequest("http://test/api/v1/systems", "POST", adminCookie, { name: "tok-sys", host: "h" }),
+			env
+		)
+		const { id, agent_token: token1 } = (await createRes.json()) as { id: string; agent_token: string }
+
+		// 1. List tokens
+		const listRes = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens`, "GET", adminCookie),
+			env
+		)
+		expect(listRes.status).toBe(200)
+		const tokens = (await listRes.json()) as { id: string; label: string; last_used: number | null }[]
+		expect(tokens).toHaveLength(1)
+		const firstTokenId = tokens[0]?.id
+		expect(firstTokenId).toBeTruthy()
+
+		// 2. Reject delete if it is the only remaining token
+		const delFailRes = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens/${firstTokenId}`, "DELETE", adminCookie),
+			env
+		)
+		expect(delFailRes.status).toBe(400)
+
+		// 3. Add second token
+		const addRes = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens`, "POST", adminCookie),
+			env
+		)
+		expect(addRes.status).toBe(201)
+		const { id: secondTokenId, agent_token: token2 } = (await addRes.json()) as {
+			id: string
+			agent_token: string
+		}
+
+		// 4. Ingest with token2 updates last_used
+		const ingestRes = await worker.fetch(
+			new Request("http://test/api/v1/ingest", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token2}`,
+				},
+				body: JSON.stringify({ ts: Math.floor(Date.now() / 1000), cpu: 10, mem: 20 }),
+			}),
+			env
+		)
+		expect(ingestRes.status).toBe(204)
+
+		const listAfterIngest = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens`, "GET", adminCookie),
+			env
+		)
+		const tokensAfterIngest = (await listAfterIngest.json()) as { id: string; last_used: number | null }[]
+		const tok2Row = tokensAfterIngest.find((t) => t.id === secondTokenId)
+		expect(tok2Row?.last_used).toBeTypeOf("number")
+
+		// 5. Delete first token now succeeds since count > 1
+		const delOkRes = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens/${firstTokenId}`, "DELETE", adminCookie),
+			env
+		)
+		expect(delOkRes.status).toBe(204)
+
+		// 6. Rotate with revoke_others=true
+		const rotateRevokeRes = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens?revoke_others=true`, "POST", adminCookie),
+			env
+		)
+		expect(rotateRevokeRes.status).toBe(201)
+		const { id: rotatedId, agent_token: rotatedToken } = (await rotateRevokeRes.json()) as {
+			id: string
+			agent_token: string
+		}
+
+		const finalList = await worker.fetch(
+			jsonRequest(`http://test/api/v1/systems/${id}/tokens`, "GET", adminCookie),
+			env
+		)
+		const finalTokens = (await finalList.json()) as { id: string }[]
+		expect(finalTokens).toHaveLength(1)
+		expect(finalTokens[0]?.id).toBe(rotatedId)
 	})
 })

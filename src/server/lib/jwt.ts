@@ -60,6 +60,7 @@ export type UserClaims = {
 	sub: string // user id
 	email: string
 	role: "admin" | "user"
+	system_ids?: string[]
 }
 
 export type JwtPayload = UserClaims & {

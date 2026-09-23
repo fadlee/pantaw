@@ -4,7 +4,7 @@ import { CreateSystemBodySchema, MetricsQuerySchema } from "../../shared/schemas
 import type { Env } from "../index"
 import { sha256Hex } from "../lib/crypto"
 import type { UserAuthVars } from "../middleware/user-auth"
-import { requireAdmin, userAuth } from "../middleware/user-auth"
+import { requireAdmin, scopeSystems, userAuth } from "../middleware/user-auth"
 
 type SystemListRow = {
 	id: string
@@ -74,9 +74,24 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 	.use("*", userAuth)
 	.get("/", async (c) => {
 		const nowSec = Math.floor(Date.now() / 1000)
-		const { results } = await c.env.DB.prepare(
-			`SELECT ${SELECT_WITH_LAST_SEEN} FROM systems s ORDER BY s.created_at DESC`
-		).all<SystemListRow>()
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		const boundedIds = allowedIds.slice(0, 100)
+		if (!isAdmin && boundedIds.length === 0) {
+			return c.json([])
+		}
+
+		let sql = `SELECT ${SELECT_WITH_LAST_SEEN} FROM systems s`
+		const params: unknown[] = []
+		if (!isAdmin) {
+			const placeholders = boundedIds.map(() => "?").join(", ")
+			sql += ` WHERE s.id IN (${placeholders})`
+			params.push(...boundedIds)
+		}
+		sql += " ORDER BY s.created_at DESC"
+
+		const stmt = c.env.DB.prepare(sql)
+		const bound = params.length > 0 ? stmt.bind(...params) : stmt
+		const { results } = await bound.all<SystemListRow>()
 		return c.json(results.map((row) => rowToResponse(row, nowSec)))
 	})
 	.post("/", requireAdmin, vValidator("json", CreateSystemBodySchema), async (c) => {
@@ -123,6 +138,10 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 	})
 	.get("/:id", async (c) => {
 		const id = c.req.param("id")
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		if (!isAdmin && !allowedIds.includes(id)) {
+			return c.json({ error: "not_found" }, 404)
+		}
 		const nowSec = Math.floor(Date.now() / 1000)
 		const row = await c.env.DB.prepare(`SELECT ${SELECT_WITH_LAST_SEEN} FROM systems s WHERE s.id = ? LIMIT 1`)
 			.bind(id)
@@ -136,6 +155,17 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404)
 		return c.body(null, 204)
 	})
+	.get("/:id/tokens", requireAdmin, async (c) => {
+		const id = c.req.param("id")
+		const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(id).first()
+		if (!exists) return c.json({ error: "not_found" }, 404)
+		const { results } = await c.env.DB.prepare(
+			"SELECT id, label, created_at, last_used FROM agent_tokens WHERE system_id = ? ORDER BY created_at DESC"
+		)
+			.bind(id)
+			.all()
+		return c.json(results)
+	})
 	.post("/:id/tokens", requireAdmin, async (c) => {
 		const id = c.req.param("id")
 		const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(id).first()
@@ -144,15 +174,47 @@ const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 		const tokenHash = await sha256Hex(rawToken)
 		const tokenId = crypto.randomUUID()
 		const now = Math.floor(Date.now() / 1000)
-		await c.env.DB.prepare(
+		const revokeOthers = c.req.query("revoke_others") === "true"
+		const insertTokenStmt = c.env.DB.prepare(
 			"INSERT INTO agent_tokens (id, system_id, token_hash, label, created_at) VALUES (?, ?, ?, ?, ?)"
-		)
-			.bind(tokenId, id, tokenHash, "rotated", now)
-			.run()
+		).bind(tokenId, id, tokenHash, revokeOthers ? "rotated" : "additional", now)
+
+		if (revokeOthers) {
+			const deleteTokensStmt = c.env.DB.prepare("DELETE FROM agent_tokens WHERE system_id = ?").bind(id)
+			const updateSystemHashStmt = c.env.DB.prepare(
+				"UPDATE systems SET agent_token_hash = ?, updated_at = ? WHERE id = ?"
+			).bind(tokenHash, now, id)
+			await c.env.DB.batch([deleteTokensStmt, insertTokenStmt, updateSystemHashStmt])
+		} else {
+			await insertTokenStmt.run()
+		}
+
 		return c.json({ id: tokenId, agent_token: rawToken, created_at: now }, 201)
+	})
+	.delete("/:id/tokens/:tokenId", requireAdmin, async (c) => {
+		const id = c.req.param("id")
+		const tokenId = c.req.param("tokenId")
+		const countRow = await c.env.DB.prepare("SELECT COUNT(*) as count FROM agent_tokens WHERE system_id = ?")
+			.bind(id)
+			.first<{ count: number }>()
+
+		if ((countRow?.count ?? 0) <= 1) {
+			return c.json({ error: "cannot_delete_last_token" }, 400)
+		}
+
+		const result = await c.env.DB.prepare("DELETE FROM agent_tokens WHERE id = ? AND system_id = ?")
+			.bind(tokenId, id)
+			.run()
+
+		if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404)
+		return c.body(null, 204)
 	})
 	.get("/:id/metrics", vValidator("query", MetricsQuerySchema), async (c) => {
 		const id = c.req.param("id")
+		const { isAdmin, allowedIds } = scopeSystems(c)
+		if (!isAdmin && !allowedIds.includes(id)) {
+			return c.json({ error: "not_found" }, 404)
+		}
 		const { from, to, bucket, limit } = c.req.valid("query")
 		const exists = await c.env.DB.prepare("SELECT 1 FROM systems WHERE id = ?").bind(id).first()
 		if (!exists) return c.json({ error: "not_found" }, 404)
