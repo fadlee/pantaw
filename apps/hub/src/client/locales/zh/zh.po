@@ -654,6 +654,7 @@ msgstr "磁碟單位"
 
 #: src/client/components/routes/system/charts/disk-charts.tsx
 #: src/client/components/routes/system/charts/disk-charts.tsx
+#: src/client/components/routes/system/charts/disk-charts.tsx
 #: src/client/lib/alerts.ts
 msgid "Disk Usage"
 msgstr "磁碟使用量"

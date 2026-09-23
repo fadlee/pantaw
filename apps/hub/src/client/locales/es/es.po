@@ -654,6 +654,7 @@ msgstr "Unidad de disco"
 
 #: src/client/components/routes/system/charts/disk-charts.tsx
 #: src/client/components/routes/system/charts/disk-charts.tsx
+#: src/client/components/routes/system/charts/disk-charts.tsx
 #: src/client/lib/alerts.ts
 msgid "Disk Usage"
 msgstr "Uso de disco"
