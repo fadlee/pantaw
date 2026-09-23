@@ -50,16 +50,29 @@ export function appendData<T extends { created: string | number | null }>(
 	// Pre-trim prev so the single slice() below is the only copy we make
 	const trimmed = maxLen && prev.length >= maxLen ? prev.slice(-(maxLen - newRecords.length)) : prev
 	const result = trimmed.slice()
-	let prevTime = (trimmed.at(-1)?.created as number) ?? 0
+	let prevTime = 0
+	for (let i = trimmed.length - 1; i >= 0; i--) {
+		if (trimmed[i]?.created != null) {
+			prevTime =
+				typeof trimmed[i].created === "string"
+					? new Date(trimmed[i].created as string).getTime()
+					: (trimmed[i].created as number)
+			break
+		}
+	}
 	for (const record of newRecords) {
 		if (record.created !== null) {
 			if (typeof record.created === "string") {
 				record.created = new Date(record.created).getTime()
 			}
-			if (prevTime && (record.created as number) - prevTime > expectedInterval * 1.5) {
+			const recordTime = record.created as number
+			if (prevTime && recordTime <= prevTime) {
+				continue
+			}
+			if (prevTime && recordTime - prevTime > expectedInterval * 1.5) {
 				result.push({ created: null, ...("stats" in record ? { stats: null } : {}) } as T)
 			}
-			prevTime = record.created as number
+			prevTime = recordTime
 		}
 		result.push(record)
 	}
@@ -131,9 +144,7 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 					})),
 				} as unknown as T))
 
-			const merged = cachedStats ? appendData(cachedStats, records, chartTimeData[chartTime].expectedInterval) : records
-			cache.set(`${systemId}_${chartTime}_${collection}`, merged as ContainerStatsRecord[])
-			return merged as T[]
+			return records as T[]
 		} catch (e) {
 			console.error("getStats container_stats", e)
 			return cachedStats ?? []
@@ -207,10 +218,7 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 			system: systemId,
 		} as unknown as T))
 
-		// Merge dengan cache (append baru, hindari duplikat)
-		const merged = cachedStats ? appendData(cachedStats, records, chartTimeData[chartTime].expectedInterval) : records
-		cache.set(`${systemId}_${chartTime}_${collection}`, merged as SystemStatsRecord[])
-		return merged as T[]
+		return records as T[]
 	} catch (e) {
 		console.error("getStats", e)
 		return cachedStats ?? []

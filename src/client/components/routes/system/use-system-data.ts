@@ -173,14 +173,14 @@ export function useSystemData(id: string) {
 			// make new system stats
 			let systemData = (cache.get(ss_cache_key) || []) as SystemStatsRecord[]
 			if (systemStats.status === "fulfilled" && systemStats.value.length) {
-				systemData = appendData(systemData, systemStats.value, expectedInterval, 100)
+				systemData = appendData(systemData, systemStats.value, expectedInterval)
 				cache.set(ss_cache_key, systemData)
 			}
 			setSystemStats(systemData)
 			// make new container stats
 			let containerData = (cache.get(cs_cache_key) || []) as ChartData["containerData"]
 			if (containerStats.status === "fulfilled" && containerStats.value.length) {
-				containerData = appendData(containerData, makeContainerData(containerStats.value), expectedInterval, 100)
+				containerData = appendData(containerData, makeContainerData(containerStats.value), expectedInterval)
 				cache.set(cs_cache_key, containerData)
 			}
 			setContainerData(containerData)

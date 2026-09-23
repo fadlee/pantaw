@@ -183,12 +183,12 @@ function generateMetricsForTime(sys: MockSystem, ts: number, stepIndex: number) 
 }
 
 async function seedHistory() {
-	console.log("Seeding past 1 hour of historical metrics...")
+	console.log("Resetting and seeding past 1 hour of historical metrics...")
+	db.run("DELETE FROM metrics")
 	const now = Math.floor(Date.now() / 1000)
 	const interval = 15 // 15 seconds per point
 	const pointsCount = 240 // 1 hour = 240 points
 	const startTs = now - pointsCount * interval
-
 	const insertStmt = db.prepare(
 		`INSERT OR IGNORE INTO metrics
 		 (system_id, ts, cpu, mem, mem_used, mem_total, disk, disk_read, disk_write,
@@ -308,7 +308,8 @@ async function startAgentStream(targetUrl = "http://localhost:5173/api/v1/ingest
 async function main() {
 	await setupSystems()
 	await seedHistory()
-	await startAgentStream()
+	if (!process.argv.includes("--seed-only")) {
+		await startAgentStream()
+	}
 }
-
 main().catch(console.error)
