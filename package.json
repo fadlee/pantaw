@@ -18,7 +18,9 @@
 		"db:migrate:remote": "wrangler d1 migrations apply pantaw --remote",
 		"db:export": "wrangler d1 export pantaw --output backup.sql",
 		"mock:agent": "bun run scripts/mock-agent.ts",
-		"release": "bun run scripts/release.ts"
+		"release": "bun run scripts/release.ts",
+		"i18n:extract": "lingui extract",
+		"i18n:compile": "lingui compile"
 	},
 	"dependencies": {
 		"@henrygd/queue": "^1.0.7",
