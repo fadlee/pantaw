@@ -1,13 +1,17 @@
 {
 	"name": "pantaw",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"description": "Deploy and upgrade a Pantaw monitoring hub on your Cloudflare account",
 	"type": "module",
 	"license": "MIT",
 	"bin": {
 		"pantaw": "./dist/cli.js"
 	},
-	"files": ["dist", "bundle", "README.md"],
+	"files": [
+		"dist",
+		"bundle",
+		"README.md"
+	],
 	"engines": {
 		"node": ">=20"
 	},
