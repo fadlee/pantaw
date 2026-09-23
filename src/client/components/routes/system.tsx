@@ -60,7 +60,7 @@ export default memo(function SystemDetail({ id }: { id: string }) {
 
 	const hasContainers = containerData.length > 0
 	const maybeHasSmartData = compareSemVer(chartData.agentVersion, SEMVER_0_15_0) >= 0
-	const hasContainersTable = hasContainers && compareSemVer(chartData.agentVersion, SEMVER_0_14_0) >= 0
+	const hasContainersTable = hasContainers
 	const hasSystemd = system.info?.sv
 	const hasGpu = hasGpuData || hasGpuPowerData
 

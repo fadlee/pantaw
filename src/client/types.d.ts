@@ -153,7 +153,7 @@ export interface ContainerStatsRecord extends BaseRecord {
 	created: string | number
 }
 
-interface ContainerStats {
+export interface ContainerStats {
 	n: string
 	c: number
 	m: number

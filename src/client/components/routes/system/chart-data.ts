@@ -79,9 +79,65 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 	systemId: string,
 	chartTime: ChartTimes
 ): Promise<T[]> {
-	// Container stats tidak tersedia di Pantaw MVP
-	if (collection !== "system_stats") {
+	if (collection !== "system_stats" && collection !== "container_stats") {
 		return []
+	}
+
+	if (collection === "container_stats") {
+		const cachedStats = cache.get(`${systemId}_${chartTime}_${collection}`) as T[] | undefined
+		const lastCached = cachedStats?.at(-1)?.created as number | undefined
+		const fromTs = getFromTimestamp(chartTime, lastCached ? new Date(lastCached + 1000) : undefined)
+		const nowTs = Math.floor(Date.now() / 1000)
+
+		try {
+			const res = await apiClient.api.v1.systems[":id"].metrics.$get({
+				param: { id: systemId },
+				query: {
+					from: String(fromTs),
+					to: String(nowTs),
+					limit: "1000",
+				},
+			})
+			if (!res.ok) return cachedStats ?? []
+
+			const json = (await res.json()) as {
+				data: {
+					ts: number
+					extra?: {
+						containers?: Array<{
+							name: string
+							cpu?: number
+							mem?: number
+							net_rx?: number
+							net_tx?: number
+						}>
+					} | null
+				}[]
+			}
+
+			const records = json.data
+				.filter((m) => m.extra?.containers && m.extra.containers.length > 0)
+				.map((m) => ({
+					id: `${systemId}_${m.ts}`,
+					system: systemId,
+					created: m.ts * 1000,
+					stats: (m.extra?.containers ?? []).map((c) => ({
+						n: c.name,
+						c: c.cpu ?? 0,
+						m: c.mem ?? 0,
+						ns: c.net_tx ?? 0,
+						nr: c.net_rx ?? 0,
+						b: [c.net_tx ?? 0, c.net_rx ?? 0] as [number, number],
+					})),
+				} as unknown as T))
+
+			const merged = cachedStats ? appendData(cachedStats, records, chartTimeData[chartTime].expectedInterval) : records
+			cache.set(`${systemId}_${chartTime}_${collection}`, merged as ContainerStatsRecord[])
+			return merged as T[]
+		} catch (e) {
+			console.error("getStats container_stats", e)
+			return cachedStats ?? []
+		}
 	}
 
 	const cachedStats = cache.get(`${systemId}_${chartTime}_${collection}`) as T[] | undefined
