@@ -52,14 +52,14 @@ export default function SettingsProfilePage({ userSettings }: { userSettings: Us
 						</h3>
 						<p className="text-sm text-muted-foreground leading-relaxed">
 							<Trans>
-								Want to help improve our translations? Check{" "}
+								Want to contribute or report an issue? Check{" "}
 								<a
-									href="https://crowdin.com/project/beszel"
+									href="https://github.com/fadlee/pantaw"
 									className="link"
 									target="_blank"
 									rel="noopener noreferrer"
 								>
-									Crowdin
+									GitHub
 								</a>{" "}
 								for details.
 							</Trans>

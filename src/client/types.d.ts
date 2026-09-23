@@ -10,12 +10,14 @@ import type {
 
 // global window properties
 declare global {
-	var BESZEL: {
-		BASE_PATH: string
-		HUB_VERSION: string
-		HUB_URL: string
-		OAUTH_DISABLE_POPUP: boolean
-	}
+	var BESZEL:
+		| {
+				BASE_PATH: string
+				HUB_VERSION: string
+				HUB_URL: string
+				OAUTH_DISABLE_POPUP: boolean
+		  }
+		| undefined
 }
 
 /** Base record — menggantikan PocketBase RecordModel */

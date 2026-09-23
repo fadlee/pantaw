@@ -292,8 +292,8 @@ export const chartMargin = { top: 12, right: 5 }
 /**
  * Retuns value of system host, truncating full path if socket.
  * @example
- * // Assuming system.host is "/var/run/beszel.sock"
- * const hostname = getHostDisplayValue(system) // hostname will be "beszel.sock"
+ * // Assuming system.host is "/var/run/pantaw.sock"
+ * const hostname = getHostDisplayValue(system) // hostname will be "pantaw.sock"
  */
 export const getHostDisplayValue = (system: SystemRecord): string =>
 	system.host.slice(system.host.lastIndexOf("/") + 1)
