@@ -25,6 +25,8 @@ type Payload struct {
 	MemUsed    uint64           `json:"mem_used"`
 	MemTotal   uint64           `json:"mem_total"`
 	Disk       float64          `json:"disk"`
+	DiskUsed   uint64           `json:"disk_used"`
+	DiskTotal  uint64           `json:"disk_total"`
 	DiskRead   uint64           `json:"disk_read"`
 	DiskWrite  uint64           `json:"disk_write"`
 	NetRx      uint64           `json:"net_rx"`
@@ -116,6 +118,8 @@ func (c *Collector) Collect() (*Payload, error) {
 	// Root disk usage
 	if du, err := disk.Usage(c.rootMount); err == nil {
 		p.Disk = round2(du.UsedPercent)
+		p.DiskUsed = du.Used
+		p.DiskTotal = du.Total
 	}
 
 	// Disk I/O delta (bytes/s)
