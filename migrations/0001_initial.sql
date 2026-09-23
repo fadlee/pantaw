@@ -1,5 +1,5 @@
 -- Pantaw initial schema
--- Lihat docs/rfc.md section 4.3
+-- Lihat docs/design/rfc.md section 4.3
 
 -- Systems: server yang dimonitor
 CREATE TABLE systems (

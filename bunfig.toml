@@ -1,4 +1,0 @@
-[install]
-# Workspaces default to the isolated linker, which stops hoisting transitive
-# deps the client imports directly (e.g. @lingui/core).
-linker = "hoisted"

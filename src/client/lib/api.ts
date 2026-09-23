@@ -1,5 +1,4 @@
 import { toast } from "@/components/ui/use-toast"
-import type { AppType } from "@/server/index"
 import type { ChartTimes, UserSettings } from "@/types"
 /**
  * Pantaw API client — menggantikan PocketBase SDK dari Beszel.
@@ -9,6 +8,7 @@ import type { ChartTimes, UserSettings } from "@/types"
  */
 import { t } from "@lingui/core/macro"
 import { hc } from "hono/client"
+import type { AppType } from "../../server/index"
 import { $alerts, $allSystemsById, $allSystemsByName, $authenticated, $userSettings } from "./stores"
 import { chartTimeData } from "./utils"
 

@@ -25,9 +25,7 @@
 		"jsx": "react-jsx",
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/client/*"],
-			"@/server/*": ["./src/server/*"],
-			"@/shared/*": ["./src/shared/*"]
+			"@/*": ["./src/client/*"]
 		}
 	},
 	"include": ["src/**/*", "tests/**/*", "vite.config.ts"]

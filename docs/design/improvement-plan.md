@@ -170,7 +170,7 @@ log terstruktur pada error, dan re-throw agar run tercatat gagal.
 
 **Perbaikan.** `README.md`: ringkasan produk, diagram arsitektur, quick start
 (deploy hub → setup admin → add system → jalankan installer agent), link ke
-`docs/rfc.md` dan `docs/deploy-cloudflare.md`, catatan batas free tier.
+`docs/design/rfc.md` dan `docs/deploy-cloudflare.md`, catatan batas free tier.
 Pertimbangkan `README.en.md` karena installer menyasar audiens internasional.
 
 ### P1.6 Perbaiki `bun run check`
