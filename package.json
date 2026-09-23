@@ -16,7 +16,8 @@
 		"check": "biome check .",
 		"db:migrate:local": "wrangler d1 migrations apply pantaw --local",
 		"db:migrate:remote": "wrangler d1 migrations apply pantaw --remote",
-		"db:export": "wrangler d1 export pantaw --output backup.sql"
+		"db:export": "wrangler d1 export pantaw --output backup.sql",
+		"mock:agent": "bun run scripts/mock-agent.ts"
 	},
 	"dependencies": {
 		"@henrygd/queue": "^1.0.7",
