@@ -56,7 +56,7 @@ bunx pantaw deploy        # or: npx pantaw deploy
 
 The wizard walks through everything: it opens the Cloudflare API token page with the right permissions pre-selected (Workers Scripts, D1, Workers KV Storage — all Edit), creates the D1 database and KV namespaces, applies migrations, deploys the Worker to `https://<name>.<subdomain>.workers.dev`, generates the JWT signing secret, creates your admin account the moment the hub is up, and can register your first server and print its agent install command.
 
-Run the same command again to upgrade: it migrates and redeploys the hub version bundled with that CLI release, keeping all data.
+To upgrade, run `bunx pantaw@latest deploy` (the `@latest` stops bunx/npx from reusing a cached older CLI): it migrates and redeploys the hub version bundled with that CLI release, keeping all data.
 
 | Command | What it does |
 |---|---|
