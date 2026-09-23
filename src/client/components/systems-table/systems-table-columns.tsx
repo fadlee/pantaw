@@ -1,9 +1,9 @@
-import { isReadOnlyUser, pb, apiClient } from "@/lib/api"
-import { $allSystemsById } from "@/lib/stores"
-import * as systemsManager from "@/lib/systemsManager"
+import { apiClient, isReadOnlyUser } from "@/lib/api"
 import { BatteryState, ConnectionType, MeterState, SystemStatus, connectionTypeLabels } from "@/lib/enums"
 import { batteryStateTranslations } from "@/lib/i18n"
+import { $allSystemsById } from "@/lib/stores"
 import { $longestSystemNameLen, $userSettings } from "@/lib/stores"
+import * as systemsManager from "@/lib/systemsManager"
 import {
 	cn,
 	copyToClipboard,
@@ -14,7 +14,6 @@ import {
 	secondsToUptimeString,
 } from "@/lib/utils"
 import type { SystemRecord } from "@/types"
-/** biome-ignore-all lint/correctness/useHookAtTopLevel: Hooks live inside memoized column definitions */
 import { t } from "@lingui/core/macro"
 import { Trans, useLingui } from "@lingui/react/macro"
 import { useStore } from "@nanostores/react"
@@ -679,16 +678,16 @@ export const ActionsButton = memo(({ system }: { system: SystemRecord }) => {
 							<AlertDialogAction
 								className={cn(buttonVariants({ variant: "destructive" }))}
 								onClick={async () => {
-								try {
-									const res = await apiClient.api.v1.systems[":id"].$delete({ param: { id } })
-									if (res.ok) {
-										const sys = $allSystemsById.get()[id]
-										if (sys) systemsManager.remove(sys)
+									try {
+										const res = await apiClient.api.v1.systems[":id"].$delete({ param: { id } })
+										if (res.ok) {
+											const sys = $allSystemsById.get()[id]
+											if (sys) systemsManager.remove(sys)
+										}
+									} catch (e) {
+										console.error("delete system", e)
 									}
-								} catch (e) {
-									console.error("delete system", e)
-								}
-							}}
+								}}
 							>
 								<Trans>Continue</Trans>
 							</AlertDialogAction>

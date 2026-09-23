@@ -1,4 +1,3 @@
-import React from "react"
 import { Button } from "@/components/ui/button"
 import {
 	DropdownMenu,
@@ -45,6 +44,7 @@ import {
 	Settings2Icon,
 	XIcon,
 } from "lucide-react"
+import React from "react"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import AlertButton from "../alerts/alert-button"
 import { $router, Link } from "../router"
@@ -509,12 +509,8 @@ const SystemCard = memo(
 												Icon && <Icon className="size-4 text-muted-foreground" />
 											)}
 										</div>
-										<div className="flex items-center text-muted-foreground pr-3">
-											{name()}:
-										</div>
-										<div className="flex items-center">
-											{flexRender(cell.column.columnDef.cell, cell.getContext())}
-										</div>
+										<div className="flex items-center text-muted-foreground pr-3">{name()}:</div>
+										<div className="flex items-center">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
 									</React.Fragment>
 								)
 							})}

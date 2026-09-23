@@ -130,19 +130,22 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 
 			const records = json.data
 				.filter((m) => m.extra?.containers && m.extra.containers.length > 0)
-				.map((m) => ({
-					id: `${systemId}_${m.ts}`,
-					system: systemId,
-					created: m.ts * 1000,
-					stats: (m.extra?.containers ?? []).map((c) => ({
-						n: c.name,
-						c: c.cpu ?? 0,
-						m: c.mem ?? 0,
-						ns: c.net_tx ?? 0,
-						nr: c.net_rx ?? 0,
-						b: [c.net_tx ?? 0, c.net_rx ?? 0] as [number, number],
-					})),
-				} as unknown as T))
+				.map(
+					(m) =>
+						({
+							id: `${systemId}_${m.ts}`,
+							system: systemId,
+							created: m.ts * 1000,
+							stats: (m.extra?.containers ?? []).map((c) => ({
+								n: c.name,
+								c: c.cpu ?? 0,
+								m: c.mem ?? 0,
+								ns: c.net_tx ?? 0,
+								nr: c.net_rx ?? 0,
+								b: [c.net_tx ?? 0, c.net_rx ?? 0] as [number, number],
+							})),
+						}) as unknown as T
+				)
 
 			return records as T[]
 		} catch (e) {
@@ -200,23 +203,26 @@ export async function getStats<T extends SystemStatsRecord | ContainerStatsRecor
 		}
 
 		// Convert flat Pantaw metrics ke nested Beszel SystemStatsRecord format
-		const records = json.data.map((m) => ({
-			created: m.ts * 1000, // Pantaw: unix sec, Beszel: ms
-			stats: {
-				cpu: m.cpu ?? 0,
-				mp: m.mem ?? 0,
-				mu: m.mem_used != null ? m.mem_used / 1024 / 1024 / 1024 : 0, // bytes -> GB
-				m: m.mem_total != null ? m.mem_total / 1024 / 1024 / 1024 : 0,
-				dp: m.disk ?? 0,
-				dr: m.disk_read != null ? m.disk_read / 1024 / 1024 : 0, // bytes/s -> MB/s
-				dw: m.disk_write != null ? m.disk_write / 1024 / 1024 : 0,
-				ns: m.net_tx != null ? m.net_tx / 1024 / 1024 : 0, // bytes/s -> MB/s
-				nr: m.net_rx != null ? m.net_rx / 1024 / 1024 : 0,
-				la: m.load1 != null ? [m.load1, m.load5 ?? 0, m.load15 ?? 0] as [number, number, number] : undefined,
-				dt: m.temp,
-			},
-			system: systemId,
-		} as unknown as T))
+		const records = json.data.map(
+			(m) =>
+				({
+					created: m.ts * 1000, // Pantaw: unix sec, Beszel: ms
+					stats: {
+						cpu: m.cpu ?? 0,
+						mp: m.mem ?? 0,
+						mu: m.mem_used != null ? m.mem_used / 1024 / 1024 / 1024 : 0, // bytes -> GB
+						m: m.mem_total != null ? m.mem_total / 1024 / 1024 / 1024 : 0,
+						dp: m.disk ?? 0,
+						dr: m.disk_read != null ? m.disk_read / 1024 / 1024 : 0, // bytes/s -> MB/s
+						dw: m.disk_write != null ? m.disk_write / 1024 / 1024 : 0,
+						ns: m.net_tx != null ? m.net_tx / 1024 / 1024 : 0, // bytes/s -> MB/s
+						nr: m.net_rx != null ? m.net_rx / 1024 / 1024 : 0,
+						la: m.load1 != null ? ([m.load1, m.load5 ?? 0, m.load15 ?? 0] as [number, number, number]) : undefined,
+						dt: m.temp,
+					},
+					system: systemId,
+				}) as unknown as T
+		)
 
 		return records as T[]
 	} catch (e) {

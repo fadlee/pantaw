@@ -1,3 +1,8 @@
+import { AddSystemDialog } from "@/components/add-system"
+import { Button } from "@/components/ui/button"
+import { apiClient } from "@/lib/api"
+import { $allSystemsById } from "@/lib/stores"
+import * as systemsManager from "@/lib/systemsManager"
 /**
  * Systems settings page — tampilkan daftar systems + token management.
  * Menggantikan Tokens & Fingerprints dari Beszel yang tidak relevan di Pantaw.
@@ -6,11 +11,6 @@ import { t } from "@lingui/core/macro"
 import { Trans, useLingui } from "@lingui/react/macro"
 import { CopyIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { useEffect, useState } from "react"
-import { AddSystemDialog } from "@/components/add-system"
-import { Button } from "@/components/ui/button"
-import { apiClient } from "@/lib/api"
-import * as systemsManager from "@/lib/systemsManager"
-import { $allSystemsById } from "@/lib/stores"
 
 type System = {
 	id: string
@@ -84,7 +84,9 @@ export default function SystemsSettings() {
 	return (
 		<div className="space-y-6">
 			<div>
-				<h3 className="text-lg font-medium"><Trans>Systems</Trans></h3>
+				<h3 className="text-lg font-medium">
+					<Trans>Systems</Trans>
+				</h3>
 				<p className="text-sm text-muted-foreground">
 					<Trans>Manage monitored systems and their agent tokens.</Trans>
 				</p>
@@ -102,20 +104,25 @@ export default function SystemsSettings() {
 			</div>
 
 			{loading ? (
-				<p className="text-sm text-muted-foreground"><Trans>Loading…</Trans></p>
+				<p className="text-sm text-muted-foreground">
+					<Trans>Loading…</Trans>
+				</p>
 			) : systems.length === 0 ? (
-				<p className="text-sm text-muted-foreground"><Trans>No systems yet.</Trans></p>
+				<p className="text-sm text-muted-foreground">
+					<Trans>No systems yet.</Trans>
+				</p>
 			) : (
 				<div className="space-y-2">
 					{systems.map((sys) => (
-						<div
-							key={sys.id}
-							className="flex items-center justify-between rounded-lg border p-3 gap-4"
-						>
+						<div key={sys.id} className="flex items-center justify-between rounded-lg border p-3 gap-4">
 							<div className="min-w-0">
 								<p className="font-medium truncate">{sys.name}</p>
 								<p className="text-xs text-muted-foreground font-mono truncate">
-									{sys.host || <span className="italic opacity-80"><Trans>Waiting for connection…</Trans></span>}
+									{sys.host || (
+										<span className="italic opacity-80">
+											<Trans>Waiting for connection…</Trans>
+										</span>
+									)}
 								</p>
 							</div>
 							<div className="flex items-center gap-2 shrink-0">
@@ -167,10 +174,7 @@ export default function SystemsSettings() {
 				</div>
 			)}
 
-			<AddSystemDialog
-				open={addOpen}
-				setOpen={setAddOpen}
-			/>
+			<AddSystemDialog open={addOpen} setOpen={setAddOpen} />
 		</div>
 	)
 }

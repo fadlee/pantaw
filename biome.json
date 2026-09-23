@@ -4,7 +4,7 @@
 		"enabled": true
 	},
 	"files": {
-		"ignore": ["dist", ".wrangler", "node_modules", "src/client"]
+		"ignore": ["dist", ".wrangler", "node_modules", "src/client/locales", "src/client/index.css"]
 	},
 	"formatter": {
 		"enabled": true,
@@ -23,12 +23,25 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"a11y": {
+				"noSvgWithoutTitle": "off",
+				"useValidAnchor": "off",
+				"useButtonType": "off"
+			},
+			"complexity": {
+				"noForEach": "off"
+			},
+			"correctness": {
+				"useExhaustiveDependencies": "off"
+			},
 			"style": {
 				"noNonNullAssertion": "warn",
-				"useImportType": "error"
+				"useImportType": "error",
+				"noParameterAssign": "off"
 			},
 			"suspicious": {
-				"noExplicitAny": "warn"
+				"noExplicitAny": "warn",
+				"noArrayIndexKey": "warn"
 			}
 		}
 	}

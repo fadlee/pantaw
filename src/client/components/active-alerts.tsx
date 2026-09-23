@@ -30,7 +30,6 @@ export const ActiveAlerts = () => {
 		return { activeAlerts, alertsKey }
 	}, [alerts])
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: alertsKey is inclusive
 	return useMemo(() => {
 		if (activeAlerts.length === 0) {
 			return null

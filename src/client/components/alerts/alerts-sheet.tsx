@@ -81,7 +81,9 @@ function toAlertRecord(a: PantawAlert): AlertRecord {
 /** Fetch alerts untuk satu system dan update store */
 async function refreshSystemAlerts(systemId: string) {
 	try {
-		const res = await apiClient.api.v1.alerts.$get({ query: { system_id: systemId } } as Parameters<typeof apiClient.api.v1.alerts.$get>[0])
+		const res = await apiClient.api.v1.alerts.$get({ query: { system_id: systemId } } as Parameters<
+			typeof apiClient.api.v1.alerts.$get
+		>[0])
 		if (!res.ok) return
 		const data = (await res.json()) as PantawAlert[]
 		const map = new Map<string, AlertRecord>()
@@ -190,9 +192,7 @@ export const AlertDialogContent = memo(function AlertDialogContent({ system }: {
 				...Array.from(sourceAlerts.values()).map(({ name, value, min }) =>
 					upsertAlerts({ name, value, min, systems: [system.id] })
 				),
-				...namesToDelete.map((name) =>
-					deleteAlerts({ name, systems: [system.id] })
-				),
+				...namesToDelete.map((name) => deleteAlerts({ name, systems: [system.id] })),
 			])
 
 			const newSystemAlerts = new Map<string, AlertRecord>()

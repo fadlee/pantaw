@@ -66,9 +66,7 @@ export const containersTableColumns: ColumnDef<ContainerTableRow>[] = [
 			if (!systemId) return null
 			const systemName = allSystems[systemId]?.name ?? systemId
 			return (
-				<span className="ms-1.5 truncate max-w-[150px] inline-block text-muted-foreground">
-					{systemName}
-				</span>
+				<span className="ms-1.5 truncate max-w-[150px] inline-block text-muted-foreground">{systemName}</span>
 			)
 		},
 	},

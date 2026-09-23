@@ -99,9 +99,7 @@ export default function ContainersTable({
 							<TableRow key={headerGroup.id}>
 								{headerGroup.headers.map((header) => (
 									<TableHead key={header.id} className="py-2">
-										{header.isPlaceholder
-											? null
-											: flexRender(header.column.columnDef.header, header.getContext())}
+										{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
 									</TableHead>
 								))}
 							</TableRow>

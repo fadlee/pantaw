@@ -44,12 +44,14 @@ export default memo(function Smart() {
 							<div className="space-y-1 text-muted-foreground leading-relaxed">
 								<p>
 									<Trans>
-										S.M.A.R.T. metrics provide hardware-level indicators of disk reliability, temperature, read/write error rates, and remaining lifespan.
+										S.M.A.R.T. metrics provide hardware-level indicators of disk reliability, temperature, read/write
+										error rates, and remaining lifespan.
 									</Trans>
 								</p>
 								<p className="text-xs">
 									<Trans>
-										To enable SMART monitoring on Linux/BSD/macOS hosts, ensure the agent runs with appropriate permissions or access to smartctl.
+										To enable SMART monitoring on Linux/BSD/macOS hosts, ensure the agent runs with appropriate
+										permissions or access to smartctl.
 									</Trans>
 								</p>
 							</div>
@@ -73,12 +75,7 @@ export default memo(function Smart() {
 												<div className="min-w-0">
 													<div className="font-medium text-sm truncate">{system.name}</div>
 													<div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-														<span
-															className={cn(
-																"size-2 rounded-full",
-																isUp ? "bg-green-500" : "bg-red-500"
-															)}
-														/>
+														<span className={cn("size-2 rounded-full", isUp ? "bg-green-500" : "bg-red-500")} />
 														<span>{isUp ? t`Online` : t`Offline`}</span>
 													</div>
 												</div>

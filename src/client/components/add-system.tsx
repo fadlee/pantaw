@@ -1,7 +1,3 @@
-import { t } from "@lingui/core/macro"
-import { Trans } from "@lingui/react/macro"
-import { CheckIcon, CopyIcon, InfoIcon, PlusIcon } from "lucide-react"
-import { useState, type Dispatch, type SetStateAction } from "react"
 import { Button } from "@/components/ui/button"
 import {
 	Dialog,
@@ -14,10 +10,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SystemRecord } from "@/types"
 import { apiClient } from "@/lib/api"
 import * as systemsManager from "@/lib/systemsManager"
 import { copyToClipboard, getHubURL } from "@/lib/utils"
+import type { SystemRecord } from "@/types"
+import { t } from "@lingui/core/macro"
+import { Trans } from "@lingui/react/macro"
+import { CheckIcon, CopyIcon, InfoIcon, PlusIcon } from "lucide-react"
+import { type Dispatch, type SetStateAction, useState } from "react"
 
 type CreatedSystem = SystemRecord & { agent_token: string }
 
@@ -111,9 +111,7 @@ function TokenRevealDialog({
 						<Trans>System added: {system.name}</Trans>
 					</DialogTitle>
 					<DialogDescription>
-						<Trans>
-							Deploy the Pantaw agent on your server using one of the methods below.
-						</Trans>
+						<Trans>Deploy the Pantaw agent on your server using one of the methods below.</Trans>
 					</DialogDescription>
 				</DialogHeader>
 
@@ -174,7 +172,9 @@ function TokenRevealDialog({
 							</TabsContent>
 							<TabsContent value="compose" className="space-y-2 pt-2">
 								<p className="text-xs text-muted-foreground">
-									<Trans>Add to your <code className="font-mono">docker-compose.yml</code>:</Trans>
+									<Trans>
+										Add to your <code className="font-mono">docker-compose.yml</code>:
+									</Trans>
 								</p>
 								<CodeSnippet code={dockerComposeCode} />
 							</TabsContent>
@@ -248,14 +248,20 @@ export function AddSystemDialog({
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle><Trans>Add System</Trans></DialogTitle>
+						<DialogTitle>
+							<Trans>Add System</Trans>
+						</DialogTitle>
 						<DialogDescription>
-							<Trans>Enter a name to register a new system. Agent deployment instructions and token will be generated.</Trans>
+							<Trans>
+								Enter a name to register a new system. Agent deployment instructions and token will be generated.
+							</Trans>
 						</DialogDescription>
 					</DialogHeader>
 					<form onSubmit={submit} className="space-y-4">
 						<div className="space-y-2">
-							<Label htmlFor="sys-name"><Trans>System Name</Trans></Label>
+							<Label htmlFor="sys-name">
+								<Trans>System Name</Trans>
+							</Label>
 							<Input
 								id="sys-name"
 								placeholder="e.g. web-production, db-server"
@@ -279,7 +285,14 @@ export function AddSystemDialog({
 								<Trans>Cancel</Trans>
 							</Button>
 							<Button type="submit" disabled={loading}>
-								{loading ? <Trans>Creating…</Trans> : <><PlusIcon className="mr-1.5 h-4 w-4" /><Trans>Create</Trans></>}
+								{loading ? (
+									<Trans>Creating…</Trans>
+								) : (
+									<>
+										<PlusIcon className="mr-1.5 h-4 w-4" />
+										<Trans>Create</Trans>
+									</>
+								)}
 							</Button>
 						</DialogFooter>
 					</form>

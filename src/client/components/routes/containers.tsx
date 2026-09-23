@@ -143,10 +143,7 @@ export default memo(function Containers() {
 					</Card>
 				</div>
 
-				<ContainersTable
-					data={allContainers}
-					showSystemColumn={true}
-				/>
+				<ContainersTable data={allContainers} showSystemColumn={true} />
 			</div>
 			<FooterRepoLink />
 		</>

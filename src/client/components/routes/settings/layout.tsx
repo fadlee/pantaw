@@ -67,7 +67,6 @@ export default function SettingsLayout() {
 
 	const page = useStore($router)
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: no dependencies
 	useEffect(() => {
 		document.title = `${t`Settings`} / Pantaw`
 		// @ts-expect-error redirect to general if no page specified

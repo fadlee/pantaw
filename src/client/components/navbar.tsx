@@ -8,7 +8,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { isAdmin, isReadOnlyUser, logOut, pb } from "@/lib/api"
+import { getCurrentUser, isAdmin, isReadOnlyUser, logOut } from "@/lib/api"
 import { cn, runOnce } from "@/lib/utils"
 import { t } from "@lingui/core/macro"
 import { Trans } from "@lingui/react/macro"
@@ -77,7 +77,7 @@ export default function Navbar() {
 						<MenuIcon />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
-						<DropdownMenuLabel className="max-w-40 truncate">{pb.authStore.record?.email}</DropdownMenuLabel>
+						<DropdownMenuLabel className="max-w-40 truncate">{getCurrentUser()?.email}</DropdownMenuLabel>
 						<DropdownMenuSeparator />
 						<DropdownMenuGroup>
 							<DropdownMenuItem
@@ -88,10 +88,7 @@ export default function Navbar() {
 								<Trans>Settings</Trans>
 							</DropdownMenuItem>
 							{!isReadOnlyUser() && (
-								<DropdownMenuItem
-									className="flex items-center"
-									onSelect={() => setAddSystemDialogOpen(true)}
-								>
+								<DropdownMenuItem className="flex items-center" onSelect={() => setAddSystemDialogOpen(true)}>
 									<PlusIcon className="h-4 w-4 me-2.5" />
 									<Trans>Add {{ foo: systemTranslation }}</Trans>
 								</DropdownMenuItem>
@@ -109,7 +106,6 @@ export default function Navbar() {
 			</div>
 
 			{/* desktop nav */}
-			{/** biome-ignore lint/a11y/noStaticElementInteractions: ignore */}
 			<div
 				className="hidden md:flex items-center ms-auto"
 				onMouseEnter={() => import("@/components/routes/settings/general")}
@@ -137,7 +133,7 @@ export default function Navbar() {
 						</button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="center" className="min-w-44">
-						<DropdownMenuLabel>{pb.authStore.record?.email}</DropdownMenuLabel>
+						<DropdownMenuLabel>{getCurrentUser()?.email}</DropdownMenuLabel>
 						<DropdownMenuSeparator />
 						{isAdmin() && (
 							<>
@@ -162,7 +158,7 @@ export default function Navbar() {
 						</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
-			{/* desktop: add system button */}
+				{/* desktop: add system button */}
 				{!isReadOnlyUser() && (
 					<Button variant="outline" className="flex gap-1 ms-2" onClick={() => setAddSystemDialogOpen(true)}>
 						<PlusIcon className="h-4 w-4 -ms-1" />

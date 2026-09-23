@@ -10,7 +10,6 @@ import languages from "@/lib/languages"
 import { $userSettings, defaultLayoutWidth } from "@/lib/stores"
 import { chartTimeData, currentHour12 } from "@/lib/utils"
 import type { UserSettings } from "@/types"
-/** biome-ignore-all lint/correctness/useUniqueElementIds: component is only rendered once */
 import { Trans, useLingui } from "@lingui/react/macro"
 import { useStore } from "@nanostores/react"
 import { LanguagesIcon, LoaderCircleIcon, SaveIcon } from "lucide-react"
@@ -53,12 +52,7 @@ export default function SettingsProfilePage({ userSettings }: { userSettings: Us
 						<p className="text-sm text-muted-foreground leading-relaxed">
 							<Trans>
 								Want to contribute or report an issue? Check{" "}
-								<a
-									href="https://github.com/fadlee/pantaw"
-									className="link"
-									target="_blank"
-									rel="noopener noreferrer"
-								>
+								<a href="https://github.com/fadlee/pantaw" className="link" target="_blank" rel="noopener noreferrer">
 									GitHub
 								</a>{" "}
 								for details.

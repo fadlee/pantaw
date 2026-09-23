@@ -112,13 +112,13 @@ export const updateFavicon = (() => {
   </defs>
   <text x="35" y="54" font-size="58" font-family="system-ui, sans-serif" font-weight="900" text-anchor="middle" fill="url(#gradient)">P</text>
   ${
-		downCount > 0
-			? `
+			downCount > 0
+				? `
 		<circle cx="50" cy="50" r="18" fill="#ef4444"/>
   	<text x="50" y="57" font-size="20" text-anchor="middle" fill="#fff" font-family="system-ui, sans-serif" font-weight="bold">${downCount}</text>
 	`
-			: ""
-	}
+				: ""
+		}
 </svg>
 `
 		const blob = new Blob([svg], { type: "image/svg+xml" })
