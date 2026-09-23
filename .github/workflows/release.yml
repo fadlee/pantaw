@@ -122,10 +122,23 @@ jobs:
 
   docker-publish:
     name: Build & Push Agent Docker Image
+    needs: build-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download Linux AMD64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-linux-amd64
+          path: agent/binaries
+
+      - name: Download Linux ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-linux-arm64
+          path: agent/binaries
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -159,5 +172,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
