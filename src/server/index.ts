@@ -87,13 +87,14 @@ export type AppType = typeof routes
 export default {
 	fetch: app.fetch,
 	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-		ctx.waitUntil(
-			(async () => {
-				if (env.DB) {
-					await ensureSchema(env.DB)
-				}
-				await runScheduled(controller, env)
-			})()
-		)
+		try {
+			if (env.DB) {
+				await ensureSchema(env.DB)
+			}
+			await runScheduled(controller, env)
+		} catch (err) {
+			console.error("cron_execution_failed", err)
+			throw err
+		}
 	},
 } satisfies ExportedHandler<Env>

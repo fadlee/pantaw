@@ -130,6 +130,7 @@ describe("cron / alertAndStatusChecker", () => {
 		await setupSystem()
 		const now = Math.floor(Date.now() / 1000)
 		// 3 sample dengan cpu > 80 dalam 60s window
+		await insertMetric(now - 70, { cpu: 90 }) // sample sebelum window 60s
 		await insertMetric(now - 50, { cpu: 90 })
 		await insertMetric(now - 30, { cpu: 85 })
 		await insertMetric(now - 10, { cpu: 95 })
@@ -160,6 +161,7 @@ describe("cron / alertAndStatusChecker", () => {
 	it("does not fire if any sample in window is below threshold (sustained breach)", async () => {
 		await setupSystem()
 		const now = Math.floor(Date.now() / 1000)
+		await insertMetric(now - 70, { cpu: 90 }) // sample sebelum window 60s
 		await insertMetric(now - 50, { cpu: 90 })
 		await insertMetric(now - 30, { cpu: 50 }) // di bawah threshold
 		await insertMetric(now - 10, { cpu: 95 })
@@ -181,7 +183,9 @@ describe("cron / alertAndStatusChecker", () => {
 	it("does not re-fire while still breaching (idempotent)", async () => {
 		await setupSystem()
 		const now = Math.floor(Date.now() / 1000)
-		await insertMetric(now - 30, { cpu: 95 })
+		await insertMetric(now - 70, { cpu: 90 }) // sample sebelum window 60s
+		await insertMetric(now - 50, { cpu: 95 })
+		await insertMetric(now - 10, { cpu: 95 })
 
 		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null))
 		const alertId = await insertAlert({
@@ -204,7 +208,9 @@ describe("cron / alertAndStatusChecker", () => {
 	it("sends resolved webhook + clears last_fired when value drops below threshold", async () => {
 		await setupSystem()
 		const now = Math.floor(Date.now() / 1000)
-		await insertMetric(now - 30, { cpu: 95 })
+		await insertMetric(now - 70, { cpu: 90 }) // sample sebelum window 60s
+		await insertMetric(now - 50, { cpu: 95 })
+		await insertMetric(now - 10, { cpu: 95 })
 
 		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null))
 		const alertId = await insertAlert({
@@ -229,6 +235,84 @@ describe("cron / alertAndStatusChecker", () => {
 		const a = await getAlert(alertId)
 		expect(a?.last_fired).toBeNull()
 	})
+
+	it("does not fire when there is no data before the window (sustained not proven)", async () => {
+		await setupSystem()
+		const now = Math.floor(Date.now() / 1000)
+		// Agent baru: semua sample breaching tapi baru ada 60s data untuk window 300s
+		await insertMetric(now - 65, { cpu: 95 })
+		await insertMetric(now - 35, { cpu: 95 })
+		await insertMetric(now - 5, { cpu: 95 })
+
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null))
+		const alertId = await insertAlert({
+			metric: "cpu",
+			operator: "gt",
+			threshold: 80,
+			duration_s: 300,
+			webhook_url: "https://example.com/webhook",
+		})
+
+		await alertAndStatusChecker(env)
+		expect(fetchMock).not.toHaveBeenCalled()
+		const a = await getAlert(alertId)
+		expect(a?.last_fired).toBeNull()
+	})
+
+	it("does not fire when data has a gap larger than timeout_seconds (agent was down)", async () => {
+		await setupSystem({ timeoutSeconds: 90 })
+		const now = Math.floor(Date.now() / 1000)
+		// Sample lama jauh sebelum window, lalu agent baru kembali dengan 1 sample breaching
+		await insertMetric(now - 3600, { cpu: 95 })
+		await insertMetric(now - 10, { cpu: 95 })
+
+		const alertId = await insertAlert({ metric: "cpu", operator: "gt", threshold: 80, duration_s: 300 })
+
+		await alertAndStatusChecker(env)
+		const a = await getAlert(alertId)
+		expect(a?.last_fired).toBeNull()
+	})
+
+	it("fires when a single in-window sample is preceded by continuous data (INTERVAL >= duration_s)", async () => {
+		await setupSystem({ timeoutSeconds: 90 })
+		const now = Math.floor(Date.now() / 1000)
+		// INTERVAL 60s, duration_s 30s: window hanya berisi 1 sample
+		await insertMetric(now - 70, { cpu: 95 })
+		await insertMetric(now - 10, { cpu: 95 })
+
+		const alertId = await insertAlert({ metric: "cpu", operator: "gt", threshold: 80, duration_s: 30 })
+
+		await alertAndStatusChecker(env)
+		const a = await getAlert(alertId)
+		expect(a?.last_fired).toBeTypeOf("number")
+	})
+
+	// Regresi: aturan coverage lama (span >= 70% duration_s) bergantung pada fase
+	// cron relatif terhadap jadwal agent, sehingga breach yang sustained terlewat
+	// di sebagian fase. Aturan harus fire di SEMUA fase untuk data yang sama.
+	for (const { interval, duration, timeout } of [
+		{ interval: 30, duration: 60, timeout: 90 }, // default agent + default alert
+		{ interval: 60, duration: 120, timeout: 150 },
+		{ interval: 120, duration: 120, timeout: 300 },
+	]) {
+		it(`fires at every cron phase (INTERVAL=${interval}s, duration_s=${duration})`, async () => {
+			const now = Math.floor(Date.now() / 1000)
+			const missed: number[] = []
+			for (let phase = 0; phase < interval; phase += 5) {
+				await reset()
+				await setupSystem({ timeoutSeconds: timeout })
+				// Umur sample terbaru = phase; data breaching kontinu sejauh 2x window
+				for (let t = now - phase; t >= now - phase - duration * 2; t -= interval) {
+					await insertMetric(t, { cpu: 95 })
+				}
+				const alertId = await insertAlert({ metric: "cpu", operator: "gt", threshold: 80, duration_s: duration })
+				await alertAndStatusChecker(env)
+				const a = await getAlert(alertId)
+				if (a?.last_fired == null) missed.push(phase)
+			}
+			expect(missed).toEqual([])
+		})
+	}
 
 	it("status alert: fires when system goes down (eq 0)", async () => {
 		await setupSystem({ lastStatus: "up", timeoutSeconds: 60 })

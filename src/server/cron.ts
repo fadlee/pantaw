@@ -81,7 +81,12 @@ async function sendWebhook(url: string, payload: unknown): Promise<void> {
  *
  * - Status alert: bandingkan int(status) dengan threshold pakai operator
  * - Numeric alert: query samples dalam window [now-duration_s, now],
- *   breaching jika SEMUA sample breach threshold (sustained breach)
+ *   breaching jika SEMUA sample breach threshold DAN data mencakup seluruh
+ *   window tanpa terputus: ada sample sebelum awal window, dan tidak ada
+ *   celah > timeout_seconds dari sample itu sampai `now` (celah sebesar itu
+ *   berarti agent sempat down). Aturan ini tidak bergantung pada fase cron
+ *   relatif terhadap jadwal kirim agent, dan berlaku untuk INTERVAL apa pun
+ *   selama agent tidak dianggap down.
  */
 async function evaluateAlert(env: Env, alert: AlertRow, system: SystemRow, nowSec: number): Promise<boolean> {
 	if (alert.metric === "status") {
@@ -95,13 +100,29 @@ async function evaluateAlert(env: Env, alert: AlertRow, system: SystemRow, nowSe
 	const windowStart = nowSec - Math.max(alert.duration_s, 1)
 	const column = alert.metric // safe: enum-validated
 	const { results } = await env.DB.prepare(
-		`SELECT ${column} AS value FROM metrics
-		 WHERE system_id = ? AND ts >= ? AND ${column} IS NOT NULL`
+		`SELECT ts, ${column} AS value FROM metrics
+		 WHERE system_id = ? AND ts >= ? AND ${column} IS NOT NULL
+		 ORDER BY ts ASC`
 	)
 		.bind(alert.system_id, windowStart)
-		.all<{ value: number }>()
+		.all<{ ts: number; value: number }>()
 
-	if (results.length === 0) return false // no data dalam window
+	if (results.length === 0) return false
+
+	// Sample terakhir sebelum window: bukti data sudah ada sebelum kondisi mulai diamati.
+	const prev = await env.DB.prepare(
+		`SELECT MAX(ts) AS ts FROM metrics
+		 WHERE system_id = ? AND ts < ? AND ${column} IS NOT NULL`
+	)
+		.bind(alert.system_id, windowStart)
+		.first<{ ts: number | null }>()
+	if (prev?.ts == null) return false // belum ada data sebelum window → belum sustained
+
+	const points = [prev.ts, ...results.map((r) => r.ts), nowSec]
+	for (let i = 1; i < points.length; i++) {
+		if (points[i] - points[i - 1] > system.timeout_seconds) return false // data terputus
+	}
+
 	return results.every((r) => compareThreshold(r.value, alert.operator, alert.threshold))
 }
 
