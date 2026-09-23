@@ -2,6 +2,7 @@ import { env } from "cloudflare:test"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import worker from "../src/server/index"
 import { sha256Hex } from "../src/server/lib/crypto"
+import { defaultKidResolver, signJwt } from "../src/server/lib/jwt"
 import { hashPassword } from "../src/server/lib/password"
 
 const ADMIN = {
@@ -395,6 +396,43 @@ describe("/api/v1/systems", () => {
 			env
 		)
 		expect(m2Res.status).toBe(404)
+	})
+
+	it("scopes sessions issued before system_ids was added to the JWT (no re-login needed)", async () => {
+		const adminCookie = await loginAs(ADMIN)
+		const r1 = await worker.fetch(
+			jsonRequest("http://test/api/v1/systems", "POST", adminCookie, { name: "legacy-1", host: "h1" }),
+			env
+		)
+		const { id: id1 } = (await r1.json()) as { id: string }
+		await worker.fetch(
+			jsonRequest("http://test/api/v1/systems", "POST", adminCookie, { name: "legacy-2", host: "h2" }),
+			env
+		)
+
+		const LEGACY_USER = { id: "user_legacy", email: "legacy@example.com", password: "pass-legacy-user" }
+		await createUser(LEGACY_USER, "user", [id1])
+
+		// JWT lama: tanpa klaim system_ids
+		const legacyToken = await signJwt(
+			{ sub: LEGACY_USER.id, email: LEGACY_USER.email, role: "user" },
+			{
+				currentKid: env.JWT_KID_CURRENT,
+				resolveSecret: defaultKidResolver(env as unknown as Record<string, unknown>),
+				expiresInSec: 3600,
+			}
+		)
+		const legacyCookie = `pantaw_session=${legacyToken}`
+
+		const listRes = await worker.fetch(jsonRequest("http://test/api/v1/systems", "GET", legacyCookie), env)
+		expect(listRes.status).toBe(200)
+		const list = (await listRes.json()) as { id: string }[]
+		expect(list.map((s) => s.id)).toEqual([id1])
+
+		// User yang sudah dihapus tidak boleh tetap masuk dengan session lamanya
+		await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(LEGACY_USER.id).run()
+		const goneRes = await worker.fetch(jsonRequest("http://test/api/v1/systems", "GET", legacyCookie), env)
+		expect(goneRes.status).toBe(401)
 	})
 
 	it("lists, deletes, and rotates tokens with revoke_others option", async () => {

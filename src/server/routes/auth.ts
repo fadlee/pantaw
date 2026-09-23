@@ -7,19 +7,7 @@ import type { Env } from "../index"
 import { defaultKidResolver, signJwt } from "../lib/jwt"
 import { hashPassword, verifyPassword } from "../lib/password"
 import type { UserAuthVars } from "../middleware/user-auth"
-import { SESSION_COOKIE, userAuth } from "../middleware/user-auth"
-function parseSystemIds(raw: string | null | undefined): string[] {
-	if (!raw) return []
-	try {
-		const parsed = JSON.parse(raw)
-		if (Array.isArray(parsed)) {
-			return parsed.filter((id): id is string => typeof id === "string")
-		}
-		return []
-	} catch {
-		return []
-	}
-}
+import { SESSION_COOKIE, parseSystemIds, userAuth } from "../middleware/user-auth"
 const app = new Hono<{ Bindings: Env; Variables: UserAuthVars }>()
 	.get("/setup-status", async (c) => {
 		const n = await userCount(c.env)

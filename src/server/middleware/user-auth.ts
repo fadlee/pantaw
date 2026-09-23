@@ -5,6 +5,20 @@ import { defaultKidResolver, verifyJwt } from "../lib/jwt"
 
 export const SESSION_COOKIE = "pantaw_session"
 
+/** Parse kolom users.system_ids (JSON array) secara defensif. */
+export function parseSystemIds(raw: string | null | undefined): string[] {
+	if (!raw) return []
+	try {
+		const parsed = JSON.parse(raw)
+		if (Array.isArray(parsed)) {
+			return parsed.filter((id): id is string => typeof id === "string")
+		}
+		return []
+	} catch {
+		return []
+	}
+}
+
 export type UserAuthVars = {
 	userId: string
 	userEmail: string
@@ -33,10 +47,23 @@ export const userAuth = createMiddleware<{ Bindings: Env; Variables: UserAuthVar
 		return c.json({ error: "unauthenticated", reason: result.error }, 401)
 	}
 
+	let systemIds = result.payload.system_ids
+	if (systemIds === undefined && result.payload.role !== "admin") {
+		// Session yang terbit sebelum klaim system_ids ada di JWT: baca dari DB
+		// agar user tidak perlu login ulang setelah upgrade.
+		const row = await c.env.DB.prepare("SELECT system_ids FROM users WHERE id = ?")
+			.bind(result.payload.sub)
+			.first<{ system_ids: string }>()
+		if (!row) {
+			return c.json({ error: "unauthenticated", reason: "user_not_found" }, 401)
+		}
+		systemIds = parseSystemIds(row.system_ids)
+	}
+
 	c.set("userId", result.payload.sub)
 	c.set("userEmail", result.payload.email)
 	c.set("userRole", result.payload.role)
-	c.set("userSystemIds", result.payload.system_ids ?? [])
+	c.set("userSystemIds", systemIds ?? [])
 	// ponytail: system_ids embedded in JWT can become stale if permissions change before session expiry (24h). Upgrade to DB lookup or token versioning when full user management is implemented.
 	c.set("jti", result.payload.jti)
 	await next()
