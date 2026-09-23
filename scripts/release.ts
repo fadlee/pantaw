@@ -118,6 +118,7 @@ async function main() {
 	// 9. Prompt to push
 	console.log("\n📦 \x1b[1mGitHub Actions Auto-Build:\x1b[0m")
 	console.log(`Pushing \x1b[32m${newTag}\x1b[0m will automatically trigger GitHub Actions to:`)
+	console.log("  • Build & package Hub Worker bundle (SPA static assets + worker + migrations)")
 	console.log("  • Build multi-arch Docker image -> ghcr.io/fadlee/pantaw-agent:latest & :" + newTag)
 	console.log("  • Build cross-platform binaries (Linux, macOS, Windows, FreeBSD)")
 	console.log("  • Create GitHub Release with downloadable artifacts & checksums")
