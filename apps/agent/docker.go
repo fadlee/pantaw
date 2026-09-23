@@ -17,6 +17,14 @@ import (
 type DockerClient struct {
 	client *http.Client
 	host   string // "http://localhost" untuk Unix socket, atau TCP URL
+
+	// prevNet simpan counter network terakhir per container ID untuk hitung rate.
+	prevNet map[string]netSample
+}
+
+type netSample struct {
+	rx, tx uint64
+	at     time.Time
 }
 
 func NewDockerClient() (*DockerClient, error) {
@@ -104,6 +112,8 @@ func (d *DockerClient) Stats() ([]ContainerStats, error) {
 		return nil, err
 	}
 
+	now := time.Now()
+	newPrev := make(map[string]netSample, len(containers))
 	result := make([]ContainerStats, 0, len(containers))
 	for _, c := range containers {
 		if c.State != "running" {
@@ -134,11 +144,23 @@ func (d *DockerClient) Stats() ([]ContainerStats, error) {
 			memUsed -= inactive
 		}
 
-		// Network total across all interfaces
-		var netRx, netTx uint64
+		// Network: counter Docker kumulatif sejak container start, ubah ke bytes/s
+		var totalRx, totalTx uint64
 		for _, n := range stats.Networks {
-			netRx += n.RxBytes
-			netTx += n.TxBytes
+			totalRx += n.RxBytes
+			totalTx += n.TxBytes
+		}
+		newPrev[c.ID] = netSample{rx: totalRx, tx: totalTx, at: now}
+		var netRx, netTx uint64
+		if prev, ok := d.prevNet[c.ID]; ok {
+			if elapsed := now.Sub(prev.at).Seconds(); elapsed > 0 {
+				if totalRx >= prev.rx {
+					netRx = uint64(float64(totalRx-prev.rx) / elapsed)
+				}
+				if totalTx >= prev.tx {
+					netTx = uint64(float64(totalTx-prev.tx) / elapsed)
+				}
+			}
 		}
 
 		name := c.ID
@@ -157,5 +179,6 @@ func (d *DockerClient) Stats() ([]ContainerStats, error) {
 			NetTx: netTx,
 		})
 	}
+	d.prevNet = newPrev
 	return result, nil
 }
