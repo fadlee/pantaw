@@ -1,6 +1,6 @@
 {
 	"name": "pantaw",
-	"version": "0.4.4",
+	"version": "0.4.5",
 	"description": "Deploy and upgrade a Pantaw monitoring hub on your Cloudflare account",
 	"type": "module",
 	"license": "MIT",
