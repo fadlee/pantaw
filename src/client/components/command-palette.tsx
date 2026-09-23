@@ -8,7 +8,6 @@ import {
 	CommandSeparator,
 	CommandShortcut,
 } from "@/components/ui/command"
-import { isAdmin } from "@/lib/api"
 import { $systems } from "@/lib/stores"
 import { getHostDisplayValue, listen } from "@/lib/utils"
 import { t } from "@lingui/core/macro"
@@ -16,21 +15,17 @@ import { Trans } from "@lingui/react/macro"
 import { getPagePath } from "@nanostores/router"
 import { DialogDescription } from "@radix-ui/react-dialog"
 import {
-	AlertOctagonIcon,
 	BookIcon,
 	ContainerIcon,
-	DatabaseBackupIcon,
 	FingerprintIcon,
 	HardDriveIcon,
-	LogsIcon,
 	MailIcon,
 	Server,
 	ServerIcon,
 	SettingsIcon,
-	UsersIcon,
 } from "lucide-react"
 import { memo, useEffect, useMemo } from "react"
-import { $router, basePath, navigate, prependBasePath } from "./router"
+import { $router, basePath, navigate } from "./router"
 
 export default memo(function CommandPalette({
 	open,
@@ -51,11 +46,6 @@ export default memo(function CommandPalette({
 		const SettingsShortcut = (
 			<CommandShortcut>
 				<Trans>Settings</Trans>
-			</CommandShortcut>
-		)
-		const AdminShortcut = (
-			<CommandShortcut>
-				<Trans>Admin</Trans>
 			</CommandShortcut>
 		)
 		return (
@@ -164,18 +154,6 @@ export default memo(function CommandPalette({
 							{SettingsShortcut}
 						</CommandItem>
 						<CommandItem
-							onSelect={() => {
-								navigate(getPagePath($router, "settings", { name: "alert-history" }))
-								setOpen(false)
-							}}
-						>
-							<AlertOctagonIcon className="me-2 size-4" />
-							<span>
-								<Trans>Alert History</Trans>
-							</span>
-							{SettingsShortcut}
-						</CommandItem>
-						<CommandItem
 							keywords={["help", "docs", "guide"]}
 							onSelect={() => {
 								window.open("https://github.com/fadlee/pantaw", "_blank")
@@ -188,63 +166,6 @@ export default memo(function CommandPalette({
 							<CommandShortcut>github</CommandShortcut>
 						</CommandItem>
 					</CommandGroup>
-					{isAdmin() && (
-						<>
-							<CommandSeparator className="mb-1.5" />
-							<CommandGroup heading={t`Admin`}>
-								<CommandItem
-									keywords={["pocketbase"]}
-									onSelect={() => {
-										setOpen(false)
-										window.open(prependBasePath("/_/"), "_blank")
-									}}
-								>
-									<UsersIcon className="me-2 size-4" />
-									<span>
-										<Trans>Users</Trans>
-									</span>
-									{AdminShortcut}
-								</CommandItem>
-								<CommandItem
-									onSelect={() => {
-										setOpen(false)
-										window.open(prependBasePath("/_/#/logs"), "_blank")
-									}}
-								>
-									<LogsIcon className="me-2 size-4" />
-									<span>
-										<Trans>Logs</Trans>
-									</span>
-									{AdminShortcut}
-								</CommandItem>
-								<CommandItem
-									onSelect={() => {
-										setOpen(false)
-										window.open(prependBasePath("/_/#/settings/backups"), "_blank")
-									}}
-								>
-									<DatabaseBackupIcon className="me-2 size-4" />
-									<span>
-										<Trans>Backups</Trans>
-									</span>
-									{AdminShortcut}
-								</CommandItem>
-								<CommandItem
-									keywords={["email"]}
-									onSelect={() => {
-										setOpen(false)
-										window.open(prependBasePath("/_/#/settings/mail"), "_blank")
-									}}
-								>
-									<MailIcon className="me-2 size-4" />
-									<span>
-										<Trans>SMTP settings</Trans>
-									</span>
-									{AdminShortcut}
-								</CommandItem>
-							</CommandGroup>
-						</>
-					)}
 					<CommandEmpty>
 						<Trans>No results found.</Trans>
 					</CommandEmpty>
