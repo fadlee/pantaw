@@ -1,10 +1,10 @@
 import { Hono } from "hono"
 import { runScheduled } from "./cron"
+import { ensureSchema } from "./lib/schema"
 import alerts from "./routes/alerts"
 import auth from "./routes/auth"
 import ingest from "./routes/ingest"
 import systems from "./routes/systems"
-
 export type Env = {
 	DB: D1Database
 	SESSION_KV: KVNamespace
@@ -20,6 +20,17 @@ export type Env = {
 }
 
 const app = new Hono<{ Bindings: Env }>()
+
+/**
+ * Auto-migration middleware: memastikan skema tabel D1 selalu terinisialisasi
+ * secara otomatis saat worker pertama kali menangani request API.
+ */
+app.use("/api/*", async (c, next) => {
+	if (c.env.DB) {
+		await ensureSchema(c.env.DB)
+	}
+	await next()
+})
 
 /**
  * Health check endpoint. Tidak di-versioning karena bukan kontrak API
@@ -77,6 +88,13 @@ export type AppType = typeof routes
 export default {
 	fetch: app.fetch,
 	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-		ctx.waitUntil(runScheduled(controller, env))
+		ctx.waitUntil(
+			(async () => {
+				if (env.DB) {
+					await ensureSchema(env.DB)
+				}
+				await runScheduled(controller, env)
+			})()
+		)
 	},
 } satisfies ExportedHandler<Env>
