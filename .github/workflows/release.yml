@@ -62,41 +62,9 @@ jobs:
           path: artifacts/*
           retention-days: 1
 
-  build-hub-worker:
-    name: Build Hub Worker Bundle
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build client & worker
-        run: bun run build
-
-      - name: Package Hub Worker bundle
-        working-directory: ./apps/hub
-        run: |
-          mkdir -p ../../artifacts
-          tar -czf "../../artifacts/pantaw-hub-${{ github.ref_name }}.tar.gz" dist migrations wrangler.toml package.json
-          zip -r "../../artifacts/pantaw-hub-${{ github.ref_name }}.zip" dist migrations wrangler.toml package.json
-
-      - name: Upload Hub artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hub-bundle
-          path: artifacts/*
-          retention-days: 1
-
   create-release:
     name: Create GitHub Release
-    needs: [build-binaries, build-hub-worker]
+    needs: build-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
